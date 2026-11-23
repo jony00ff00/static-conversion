@@ -9,7 +9,7 @@ import { dirSource, withSandbox } from '../src/render/sandbox.js';
 import { DEFAULT_PRESETS, type DecompositionSettings } from '../src/model/types.js';
 import { evaluateFixture } from './decomposition-eval.js';
 import { LABELS } from './decomposition-labels.js';
-import { fixture } from './helpers.js';
+import { REPO, fixture } from './helpers.js';
 
 const DEC: DecompositionSettings = { granularity: 2, rules: [], split: [], promoted: [], demoted: [], merged: [] };
 const run = (name: string, extra: Partial<Parameters<typeof analyse>[1]> = {}) =>
@@ -63,9 +63,12 @@ describe('M3: isolated components look like their region of the page', () => {
           // edges (sub-pixel text position) are a large share of the pixels.
           const d = comparePng(PNG.sync.write(ref), shot, { threshold: 0.2 });
           if (d.ratio >= 0.01) {
-            const { writeFileSync } = await import('node:fs');
-            writeFileSync(`/tmp/claude-0/-home-user/3a722e45-d815-55a0-9a3a-8453f65402cb/scratchpad/iso-${name}-${n.wpId}-ref.png`, PNG.sync.write(ref));
-            writeFileSync(`/tmp/claude-0/-home-user/3a722e45-d815-55a0-9a3a-8453f65402cb/scratchpad/iso-${name}-${n.wpId}-got.png`, shot);
+            // Keep both images for inspection (CI uploads .golden-diff/ on failure).
+            const { mkdirSync, writeFileSync } = await import('node:fs');
+            const dir = `${REPO}/.golden-diff/isolation`;
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(`${dir}/${name}-${n.wpId}-expected.png`, PNG.sync.write(ref));
+            writeFileSync(`${dir}/${name}-${n.wpId}-actual.png`, shot);
           }
           expect(d.ratio, `${name} ${n.tag} "${n.name}"`).toBeLessThan(0.01);
           checked++;

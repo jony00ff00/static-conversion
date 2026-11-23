@@ -216,11 +216,16 @@ export async function renderPages(
 /** Measure flow layout of a component laid out at `widthPx`. */
 export async function measureFlow(s: ProjectState, def: ComponentDef, widthPx: number): Promise<FlowLayout> {
   return withSandbox(s.meta.source, { viewport: { width: Math.ceil(widthPx), height: 900 }, timeoutMs: 60_000 }, async (sb) => {
+    // Measure inside a frame of exactly the printed width (e.g. 680.31 px), as
+    // the page composition does: the browser window is whole pixels, and a
+    // fraction of a pixel changes where lines wrap.
     const html = htmlForServer(s)(def, widthPx);
-    const url = sb.serve('flow.html', html);
+    const esc = html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const url = sb.serve('flow.html', `<!DOCTYPE html><html><head><style>html,body{margin:0}iframe{border:0;display:block;width:${widthPx}px;height:900px}</style></head><body><iframe srcdoc="${esc}"></iframe></body></html>`);
     await sb.page.goto(url, { waitUntil: 'load' });
-    await sb.page.evaluate('document.fonts.ready');
-    return (await sb.page.evaluate(FLOW_JS)) as FlowLayout;
+    const frame = sb.page.frames().find((f) => f !== sb.page.mainFrame())!;
+    await frame.evaluate('document.fonts.ready');
+    return (await frame.evaluate(FLOW_JS)) as FlowLayout;
   });
 }
 

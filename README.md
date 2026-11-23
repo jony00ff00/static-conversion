@@ -6,11 +6,11 @@ an editable print preview, and the result exports at print quality. No LLM is us
 
 - Full plan and milestones: [`docs/PLAN.md`](docs/PLAN.md)
 - Render sandbox: [`docs/SANDBOX.md`](docs/SANDBOX.md)
-- Milestone checks: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md)
+- Milestone checks: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md), [`docs/M2-M6-CHECKLIST.md`](docs/M2-M6-CHECKLIST.md)
 - Final review (the only manual check): [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)
 - Sample outputs: [`docs/samples/`](docs/samples/)
 
-## Status: M1 — render core and single-page A4 export
+## Status: M6 — editor with decomposition, arranging, content editing and multi-page flow
 
 | Part | Where |
 |---|---|
@@ -20,6 +20,11 @@ an editable print preview, and the result exports at print quality. No LLM is us
 | Sandboxed, deterministic renderer and freezing | `src/render/sandbox.ts`, `src/render/*.browser.js` |
 | Font report | `src/render/fonts.ts` |
 | A4 export (PDF, PNG) | `src/export/` |
+| Editor document model, operations, snapping | `src/model/` |
+| Component tree, isolation, page composition (shared by editor and server) | `src/compose/` |
+| Pagination: layout measurement and break rules | `src/flow/` |
+| Editor server and API | `src/server/` |
+| Editor UI (React) | `src/client/` |
 | Golden-file comparison | `src/golden/` |
 | 12 test fixtures, plus freeze fixtures | `fixtures/`, `tests/freeze-fixtures/` |
 | Golden outputs (DOM, screenshot, A4 export, summary) | `golden/` |
@@ -35,7 +40,18 @@ npx playwright install chromium   # first time only
 npm test
 ```
 
-Export a page:
+Run the editor:
+
+```bash
+npm run dev    # then open http://localhost:5173
+```
+
+Import a test page, pasted code, a zip or a URL. The web page appears on the left and
+the A4 pages on the right. Drag components from the library or the web page onto a
+page, double-click a frame to edit its text, and use **Flow onto pages** for long
+content. **Export PDF** downloads the result.
+
+Export a page from the command line:
 
 ```bash
 npm run export -- fixtures/01-static out.pdf
@@ -47,7 +63,8 @@ npm run export:test-page -- margin-test-page.pdf
 
 | Command | What it does |
 |---|---|
-| `npm test` | Schema, sandbox, determinism and golden tests |
+| `npm run dev` | Start the editor at http://localhost:5173 (`PORT` to change; projects are stored in `data/`) |
+| `npm test` | Every automated check, unit and end-to-end (about 4 minutes) |
 | `npm run typecheck` | TypeScript check |
 | `npm run golden` | Render all fixtures and compare with `golden/` (diffs go to `.golden-diff/`) |
 | `npm run golden:update` | Rewrite the golden files. **Review the changed images before committing.** |
@@ -67,8 +84,9 @@ npm run export:test-page -- margin-test-page.pdf
 4. A report lists font substitutions, content cut off at the bottom or right, the smallest
    text size on paper, and anything blocked or rasterised.
 
-Content taller than one page is cut off (`--fit=clip`, the default) or scaled down to
-fit (`--fit=shrink`). Multi-page layout arrives in M6.
+On the command line, content taller than one page is cut off (`--fit=clip`, the default)
+or scaled down to fit (`--fit=shrink`). In the editor, **Flow onto pages** paginates it
+instead.
 
 ## Determinism
 

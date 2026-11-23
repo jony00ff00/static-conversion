@@ -135,24 +135,29 @@ export function checkSlices(layout: FlowLayout, slices: FlowSlice[]): Pagination
   });
   for (let k = 0; k < real.length - 1; k++) {
     const s = real[k]!;
+    const y = s.endPx;
     // Last block fully inside the slice must not be a heading.
+    // A heading is stranded only if nothing (no block, no line of a split
+    // paragraph) follows it in the same frame.
     const inside = layout.blocks.filter((b) => b.top >= s.startPx - tol && b.bottom <= s.endPx + tol);
     const last = inside[inside.length - 1];
-    if (last?.kind === 'heading') issues.push({ rule: 'heading-last', detail: `heading ends frame ${k}` });
-    // Paragraph split: count lines of the split block on each side.
-    const byBlock = new Map<number, number[]>();
-    layout.lines.forEach((ln) => {
-      if (ln.top < s.endPx && ln.bottom > s.endPx - 1e9) {
-        const arr = byBlock.get(ln.block) ?? [];
-        arr.push(ln.top);
-        byBlock.set(ln.block, arr);
-      }
-    });
-    for (const [bi, tops] of byBlock) {
-      const before = tops.filter((t) => t < s.endPx).length;
-      const after = tops.length - before;
-      if (before > 0 && after > 0 && (before < MIN_LINES || after < MIN_LINES)) {
-        issues.push({ rule: 'widow-orphan', detail: `block ${bi} split ${before}/${after} at frame ${k}` });
+    if (last?.kind === 'heading') {
+      const follows =
+        layout.blocks.some((b) => b !== last && b.top >= last.bottom - tol && b.top < s.endPx - tol) ||
+        layout.lines.some((l) => l.top >= last.bottom - tol && l.bottom <= s.endPx + tol);
+      if (!follows) issues.push({ rule: 'heading-last', detail: `heading ends frame ${k}` });
+    }
+    // A paragraph split at y keeps at least MIN_LINES lines on each side.
+    const byBlock = new Map<number, { before: number; after: number }>();
+    for (const ln of layout.lines) {
+      const c = byBlock.get(ln.block) ?? { before: 0, after: 0 };
+      if (ln.bottom <= y + tol) c.before++;
+      else if (ln.top >= y - tol) c.after++;
+      byBlock.set(ln.block, c);
+    }
+    for (const [bi, c] of byBlock) {
+      if (c.before > 0 && c.after > 0 && (c.before < MIN_LINES || c.after < MIN_LINES)) {
+        issues.push({ rule: 'widow-orphan', detail: `block ${bi} split ${c.before}/${c.after} at frame ${k}` });
       }
     }
   }
