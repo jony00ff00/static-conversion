@@ -72,7 +72,8 @@ h3 { font-size: 12px; margin: 10px 0 4px; }
 .lib-item:hover { background: var(--accent-soft); }
 .lib-item.on { background: var(--accent-soft); outline: 1px solid var(--accent); }
 .lib-item.hl .lib-name { font-weight: 600; }
-.lib-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-item, .tree { min-width: 0; overflow: hidden; }
 .lib-actions { display: none; gap: 2px; }
 .lib-item:hover .lib-actions, .lib-item.on .lib-actions { display: inline-flex; }
 .lib-actions button { padding: 0 5px; }
