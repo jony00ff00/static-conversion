@@ -13,9 +13,13 @@
     "golden": "tsx scripts/golden.ts",
     "golden:update": "tsx scripts/golden.ts --update",
     "fixtures:vendor": "tsx scripts/vendor-fixtures.ts",
-    "render": "tsx scripts/render.ts"
+    "render": "tsx scripts/render.ts",
+    "export": "tsx scripts/export.ts",
+    "export:test-page": "tsx scripts/export-test-page.ts"
   },
   "dependencies": {
+    "fflate": "0.8.3",
+    "pdf-lib": "1.17.1",
     "pixelmatch": "8.0.0",
     "playwright": "1.63.0",
     "pngjs": "7.0.0",

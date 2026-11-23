@@ -1,5 +1,23 @@
 {
-  "wpIdCount": 37,
+  "wpIdCount": 36,
   "blockedRequests": [],
-  "pageErrors": []
+  "pageErrors": [],
+  "freeze": {
+    "canvases": 0,
+    "videos": 0,
+    "pseudoConverted": 0,
+    "pseudoSkipped": 0,
+    "placeholders": 0,
+    "screenshots": 0
+  },
+  "fonts": [
+    "Arial 400 normal: substituted (Liberation Sans)",
+    "Arial 700 normal: substituted (Liberation Sans)"
+  ],
+  "export": {
+    "captureWidthPx": 680,
+    "documentHeightPx": 971,
+    "overflowMm": 0.029,
+    "smallestTextPt": 10.5
+  }
 }

@@ -1,5 +1,25 @@
 {
-  "wpIdCount": 55,
+  "wpIdCount": 54,
   "blockedRequests": [],
-  "pageErrors": []
+  "pageErrors": [],
+  "freeze": {
+    "canvases": 0,
+    "videos": 0,
+    "pseudoConverted": 0,
+    "pseudoSkipped": 0,
+    "placeholders": 0,
+    "screenshots": 0
+  },
+  "fonts": [
+    "system-ui 300 normal: generic (Inter Light)",
+    "system-ui 400 normal: generic (Inter)",
+    "system-ui 500 normal: generic (Inter Medium)",
+    "system-ui 700 normal: generic (Inter)"
+  ],
+  "export": {
+    "captureWidthPx": 680,
+    "documentHeightPx": 971,
+    "overflowMm": 0.029,
+    "smallestTextPt": 9
+  }
 }

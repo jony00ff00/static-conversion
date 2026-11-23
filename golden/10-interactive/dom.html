@@ -15,10 +15,10 @@ body{margin:0;padding:32px;font-family:Arial,sans-serif;color:#1e293b}
 .fade-in{animation:fade 2s ease-out forwards;opacity:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fade{to{opacity:1}}
-</style></head>
+</style><style data-ve-static="">*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}[data-ve-pseudo~="before"]::before{content:none!important}[data-ve-pseudo~="after"]::after{content:none!important}</style></head>
 <body data-wp-id="1h92ztq">
-<h1 data-wp-id="1xevk24">Product details <span class="spinner" aria-label="loading" data-wp-id="1ofgfkp"></span></h1>
-<p class="fade-in" data-wp-id="1nfw05m">This paragraph fades in; a frozen render must show it fully visible.</p>
+<h1 data-wp-id="1xevk24">Product details <span class="spinner" aria-label="loading" data-wp-id="1ofgfkp" style="transform: matrix(1, 0, 0, 1, 0, 0) !important;"></span></h1>
+<p class="fade-in" data-wp-id="1nfw05m" style="opacity: 1 !important;">This paragraph fades in; a frozen render must show it fully visible.</p>
 <div class="tabs" data-wp-id="10quoh">
   <div role="tablist" data-wp-id="14ssjiu">
     <button role="tab" id="t1" aria-selected="true" aria-controls="p1" data-wp-id="rpzqdp">Overview</button>
@@ -42,27 +42,7 @@ body{margin:0;padding:32px;font-family:Arial,sans-serif;color:#1e293b}
   <div class="slide" style="background:#16a34a" hidden="" data-wp-id="1fmoi6f">Slide 2: Green</div>
   <div class="slide" style="background:#dc2626" hidden="" data-wp-id="13w522b">Slide 3: Red</div>
 </div>
-<script data-wp-id="6h3xee">
-document.querySelectorAll('[role=tab]').forEach(function (tab) {
-  tab.addEventListener('click', function () {
-    document.querySelectorAll('[role=tab]').forEach(function (t) {
-      t.setAttribute('aria-selected', String(t === tab));
-      document.getElementById(t.getAttribute('aria-controls')).hidden = t !== tab;
-    });
-  });
-});
-document.querySelectorAll('.accordion button').forEach(function (b) {
-  b.addEventListener('click', function () {
-    var open = b.getAttribute('aria-expanded') === 'true';
-    b.setAttribute('aria-expanded', String(!open));
-    document.getElementById(b.getAttribute('aria-controls')).hidden = open;
-  });
-});
-(function () {
-  var slides = document.querySelectorAll('.slide'), i = 0;
-  setInterval(function () { slides[i].hidden = true; i = (i + 1) % slides.length; slides[i].hidden = false; }, 3000);
-})();
-</script>
+
 
 
 </body></html>

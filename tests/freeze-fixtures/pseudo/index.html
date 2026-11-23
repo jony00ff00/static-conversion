@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Pseudo-element fixture</title>
+<style>
+body{margin:0;padding:32px;font:16px/1.5 Arial,sans-serif;color:#111}
+.badge::before{content:"NEW";display:inline-block;background:#dc2626;color:#fff;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:4px;margin-right:8px}
+.price::after{content:" incl. VAT";color:#6b7280;font-size:13px}
+.quote::before{content:"\201C";font-size:40px;color:#9333ea;vertical-align:-12px;margin-right:4px}
+.link::after{content:" (" attr(data-url) ")";color:#2563eb}
+.dot::before{content:"";display:inline-block;width:12px;height:12px;border-radius:50%;background:#16a34a;margin-right:8px;vertical-align:middle}
+.icon::before{content:url("star.svg");margin-right:6px;vertical-align:middle}
+ol.steps{counter-reset:step;list-style:none;padding:0}
+ol.steps li{counter-increment:step}
+ol.steps li::before{content:counter(step) ". ";font-weight:bold}
+.box{position:relative;width:200px;height:60px;border:1px solid #ccc;margin-top:16px}
+.box::after{content:"";position:absolute;right:8px;top:8px;width:20px;height:20px;background:#f59e0b}
+</style></head>
+<body>
+<p class="badge">Spring collection</p>
+<p class="price">£24.99</p>
+<p class="quote">Pseudo-elements must survive extraction.</p>
+<p class="link" data-url="example.com/shop">Visit our shop</p>
+<p class="dot">In stock</p>
+<p class="icon">Top rated</p>
+<ol class="steps"><li>Order</li><li>Pay</li><li>Collect</li></ol>
+<div class="box">Corner marker</div>
+</body>
+</html>

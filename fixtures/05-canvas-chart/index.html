@@ -12,7 +12,6 @@
 <script>
   Chart.defaults.animation = false;
   Chart.defaults.responsive = false;
-  Chart.defaults.devicePixelRatio = 1;
   new Chart(document.getElementById('bar'), { type: 'bar', data: { labels: ['Q1','Q2','Q3','Q4'], datasets: [{ label: 'Revenue', data: [120, 150, 135, 190], backgroundColor: '#2563eb' }] } });
   new Chart(document.getElementById('line'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun'], datasets: [{ label: 'Customers', data: [300, 320, 360, 410, 430, 480], borderColor: '#16a34a', tension: 0.3 }] } });
 </script>

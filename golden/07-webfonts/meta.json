@@ -1,5 +1,25 @@
 {
-  "wpIdCount": 13,
+  "wpIdCount": 12,
   "blockedRequests": [],
-  "pageErrors": []
+  "pageErrors": [],
+  "freeze": {
+    "canvases": 0,
+    "videos": 0,
+    "pseudoConverted": 0,
+    "pseudoSkipped": 0,
+    "placeholders": 0,
+    "screenshots": 0
+  },
+  "fonts": [
+    "DefinitelyMissingFont 400 normal: substituted (Liberation Serif)",
+    "InterLocal 400 italic: ok (Inter)",
+    "InterLocal 400 normal: ok (Inter)",
+    "InterLocal 700 normal: ok (Inter)"
+  ],
+  "export": {
+    "captureWidthPx": 680,
+    "documentHeightPx": 971,
+    "overflowMm": 0.029,
+    "smallestTextPt": 12
+  }
 }

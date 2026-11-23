@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>WebGL fixture</title><style>body{margin:0;padding:24px;background:#fff}</style></head>
+<body>
+<canvas id="gl" width="300" height="200"></canvas>
+<script>
+// Draws once, WITHOUT preserveDrawingBuffer: a naive toDataURL() later would be blank.
+var c = document.getElementById('gl');
+var gl = c.getContext('webgl');
+if (gl) {
+  gl.clearColor(0.15, 0.39, 0.92, 1);
+  gl.enable(gl.SCISSOR_TEST);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.scissor(100, 50, 100, 100);
+  gl.clearColor(0.96, 0.62, 0.04, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+} else {
+  document.body.setAttribute('data-no-webgl', '');
+}
+</script>
+</body>
+</html>

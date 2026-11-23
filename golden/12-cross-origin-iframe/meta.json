@@ -1,8 +1,26 @@
 {
-  "wpIdCount": 12,
+  "wpIdCount": 11,
   "blockedRequests": [
     "https://cdn.example.com/logo.png",
     "https://maps.example.com/embed?q=riverside"
   ],
-  "pageErrors": []
+  "pageErrors": [],
+  "freeze": {
+    "canvases": 0,
+    "videos": 0,
+    "pseudoConverted": 0,
+    "pseudoSkipped": 0,
+    "placeholders": 2,
+    "screenshots": 0
+  },
+  "fonts": [
+    "Arial 400 normal: substituted (Liberation Sans)",
+    "Arial 700 normal: substituted (Liberation Sans)"
+  ],
+  "export": {
+    "captureWidthPx": 680,
+    "documentHeightPx": 971,
+    "overflowMm": 0.029,
+    "smallestTextPt": 12
+  }
 }

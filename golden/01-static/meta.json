@@ -1,5 +1,24 @@
 {
-  "wpIdCount": 31,
+  "wpIdCount": 30,
   "blockedRequests": [],
-  "pageErrors": []
+  "pageErrors": [],
+  "freeze": {
+    "canvases": 0,
+    "videos": 0,
+    "pseudoConverted": 0,
+    "pseudoSkipped": 0,
+    "placeholders": 0,
+    "screenshots": 0
+  },
+  "fonts": [
+    "Georgia 400 italic: substituted (Liberation Serif)",
+    "Georgia 400 normal: substituted (Liberation Serif)",
+    "Georgia 700 normal: substituted (Liberation Serif)"
+  ],
+  "export": {
+    "captureWidthPx": 680,
+    "documentHeightPx": 971,
+    "overflowMm": 0.029,
+    "smallestTextPt": 10.5
+  }
 }
