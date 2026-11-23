@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" data-wp-id="1eep4fa"><head data-wp-id="v262p8"><meta charset="utf-8" data-wp-id="61rsjf"><title data-wp-id="b7htap">Print media and dark mode fixture</title>
+<style data-wp-id="10gejot">
+:root{--bg:#ffffff;--fg:#0f172a;--accent:#9333ea}
+html.dark{--bg:#0f172a;--fg:#e2e8f0;--accent:#c084fc}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Arial,sans-serif}
+.site-nav{position:sticky;top:0;background:var(--accent);color:#fff;padding:12px 24px;display:flex;justify-content:space-between}
+main{padding:32px 24px}
+.cookie{position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fff;padding:16px 24px;display:flex;justify-content:space-between}
+.only-print{display:none}
+@media print{.site-nav,.cookie,.no-print{display:none}.only-print{display:block}a::after{content:" (" attr(href) ")"}}
+</style></head>
+<body data-wp-id="1h92ztq">
+<nav class="site-nav" data-wp-id="g12o07"><span data-wp-id="xyljt7">Event Co.</span><button class="no-print" id="theme" data-wp-id="10n00de">Toggle dark mode</button></nav>
+<main data-wp-id="1almtjh">
+  <h1 data-wp-id="vv6ecv">Summer Conference 2026</h1>
+  <p data-wp-id="t6i50q">Join us on 14 July at the Riverside Hall. Book at <a href="https://example.com/book" data-wp-id="5u8cc">our booking page</a>.</p>
+  <p class="no-print" data-wp-id="q6qg8p">Scroll down for the live schedule.</p>
+  <p class="only-print" data-wp-id="11bq1ao">Printed programme — please keep for reference.</p>
+  <table data-wp-id="11d6cq3"><tbody data-wp-id="15ooqkl"><tr data-wp-id="6f5g3l"><th data-wp-id="r5syyu">Time</th><th data-wp-id="1ftx8fc">Session</th></tr><tr data-wp-id="5v9e7m"><td data-wp-id="7q8nfx">09:00</td><td data-wp-id="1bdhunb">Welcome</td></tr><tr data-wp-id="5bdcbn"><td data-wp-id="1pl61qe">10:00</td><td data-wp-id="gby7zd">Keynote</td></tr></tbody></table>
+</main>
+<div class="cookie" role="dialog" aria-label="Cookie consent" data-wp-id="10quoh"><span data-wp-id="1127mar">We use cookies.</span><button data-wp-id="11yy2cj">Accept</button></div>
+<script data-wp-id="11fzt8y">document.getElementById('theme').addEventListener('click',function(){document.documentElement.classList.toggle('dark')});</script>
+
+
+</body></html>

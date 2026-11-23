@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en" data-wp-id="1eep4fa"><head data-wp-id="v262p8"><meta charset="utf-8" data-wp-id="61rsjf"><title data-wp-id="1588e4x">Canvas chart fixture</title>
+<style data-wp-id="5hm11w">body{margin:0;padding:32px;font-family:Arial,sans-serif;background:#fff}.row{display:flex;gap:32px}figure{margin:0}figcaption{font-size:14px;color:#555;margin-top:8px}</style></head>
+<body data-wp-id="1h92ztq">
+<h1 data-wp-id="1e42ido">Quarterly report</h1>
+<div class="row" data-wp-id="10quoh">
+  <figure data-wp-id="nuxoor"><canvas id="bar" width="560" height="320" style="display: block; box-sizing: border-box; height: 320px; width: 560px;" data-wp-id="1bpveat"></canvas><figcaption data-wp-id="8pps8d">Revenue by quarter (£k)</figcaption></figure>
+  <figure data-wp-id="nap0sw"><canvas id="line" width="560" height="320" style="display: block; box-sizing: border-box; height: 320px; width: 560px;" data-wp-id="13jus08"></canvas><figcaption data-wp-id="mop2ir">Active customers</figcaption></figure>
+</div>
+<script src="vendor/chart.umd.js" data-wp-id="1u4m9lb"></script>
+<script data-wp-id="1l1fsns">
+  Chart.defaults.animation = false;
+  Chart.defaults.responsive = false;
+  Chart.defaults.devicePixelRatio = 1;
+  new Chart(document.getElementById('bar'), { type: 'bar', data: { labels: ['Q1','Q2','Q3','Q4'], datasets: [{ label: 'Revenue', data: [120, 150, 135, 190], backgroundColor: '#2563eb' }] } });
+  new Chart(document.getElementById('line'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun'], datasets: [{ label: 'Customers', data: [300, 320, 360, 410, 430, 480], borderColor: '#16a34a', tension: 0.3 }] } });
+</script>
+
+
+</body></html>

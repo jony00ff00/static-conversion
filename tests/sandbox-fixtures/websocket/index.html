@@ -1,0 +1,6 @@
+<!DOCTYPE html><html><body><p id="out">pending</p>
+<script>
+var ws = new WebSocket('wss://socket.example.com/live');
+ws.onopen = function(){ document.getElementById('out').textContent = 'LEAKED'; };
+ws.onclose = function(){ document.getElementById('out').textContent = 'closed'; };
+</script></body></html>

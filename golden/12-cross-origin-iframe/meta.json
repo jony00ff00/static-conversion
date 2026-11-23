@@ -1,0 +1,8 @@
+{
+  "wpIdCount": 12,
+  "blockedRequests": [
+    "https://cdn.example.com/logo.png",
+    "https://maps.example.com/embed?q=riverside"
+  ],
+  "pageErrors": []
+}

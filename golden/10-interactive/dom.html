@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en" data-wp-id="1eep4fa"><head data-wp-id="v262p8"><meta charset="utf-8" data-wp-id="61rsjf"><title data-wp-id="dm82j5">Interactive fixture</title>
+<style data-wp-id="5hm11w">
+body{margin:0;padding:32px;font-family:Arial,sans-serif;color:#1e293b}
+.tabs [role=tablist]{display:flex;gap:4px}
+.tabs [role=tab]{padding:8px 16px;border:1px solid #cbd5e1;background:#f1f5f9;cursor:pointer}
+.tabs [role=tab][aria-selected=true]{background:#fff;border-bottom-color:#fff;font-weight:bold}
+.tabs [role=tabpanel]{border:1px solid #cbd5e1;padding:16px;margin-top:-1px}
+.accordion button{display:block;width:100%;text-align:left;padding:12px;border:1px solid #cbd5e1;background:#f8fafc}
+.accordion .panel{padding:12px;border:1px solid #cbd5e1;border-top:0}
+.carousel{position:relative;width:480px;height:160px;overflow:hidden;margin-top:24px;border-radius:8px}
+.slide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff}
+.slide[hidden]{display:none}
+.spinner{width:24px;height:24px;border:4px solid #cbd5e1;border-top-color:#2563eb;border-radius:50%;animation:spin 1s linear infinite;display:inline-block;vertical-align:middle}
+.fade-in{animation:fade 2s ease-out forwards;opacity:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fade{to{opacity:1}}
+</style></head>
+<body data-wp-id="1h92ztq">
+<h1 data-wp-id="1xevk24">Product details <span class="spinner" aria-label="loading" data-wp-id="1ofgfkp"></span></h1>
+<p class="fade-in" data-wp-id="1nfw05m">This paragraph fades in; a frozen render must show it fully visible.</p>
+<div class="tabs" data-wp-id="10quoh">
+  <div role="tablist" data-wp-id="14ssjiu">
+    <button role="tab" id="t1" aria-selected="true" aria-controls="p1" data-wp-id="rpzqdp">Overview</button>
+    <button role="tab" id="t2" aria-selected="false" aria-controls="p2" data-wp-id="h0kwkf">Specs</button>
+    <button role="tab" id="t3" aria-selected="false" aria-controls="p3" data-wp-id="1usk481">Reviews</button>
+  </div>
+  <div role="tabpanel" id="p1" aria-labelledby="t1" data-wp-id="1vxjihp">A lightweight travel kettle with a 0.8 litre capacity.</div>
+  <div role="tabpanel" id="p2" aria-labelledby="t2" hidden="" data-wp-id="1emvpdf">1200 W · 0.8 L · 650 g · UK plug</div>
+  <div role="tabpanel" id="p3" aria-labelledby="t3" hidden="" data-wp-id="123phqo">★★★★☆ “Boils fast, packs small.”</div>
+</div>
+<h2 data-wp-id="yqxu9o">FAQ</h2>
+<div class="accordion" data-wp-id="gx0ea">
+  <button aria-expanded="false" aria-controls="a1" data-wp-id="1pugb3y">Is it dual voltage?</button>
+  <div class="panel" id="a1" hidden="" data-wp-id="1a35p91">No, UK 230 V only.</div>
+  <button aria-expanded="false" aria-controls="a2" data-wp-id="k56crz">What is the warranty?</button>
+  <div class="panel" id="a2" hidden="" data-wp-id="pr9d7o">Two years.</div>
+</div>
+<details data-wp-id="1mbmq7i"><summary data-wp-id="9v1lq6">Delivery information</summary><p data-wp-id="ftr6md">Free delivery on orders over £20.</p></details>
+<div class="carousel" aria-roledescription="carousel" data-wp-id="1yy50hf">
+  <div class="slide" style="background:#2563eb" data-wp-id="f7uryw">Slide 1: Blue</div>
+  <div class="slide" style="background:#16a34a" hidden="" data-wp-id="1fmoi6f">Slide 2: Green</div>
+  <div class="slide" style="background:#dc2626" hidden="" data-wp-id="13w522b">Slide 3: Red</div>
+</div>
+<script data-wp-id="6h3xee">
+document.querySelectorAll('[role=tab]').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('[role=tab]').forEach(function (t) {
+      t.setAttribute('aria-selected', String(t === tab));
+      document.getElementById(t.getAttribute('aria-controls')).hidden = t !== tab;
+    });
+  });
+});
+document.querySelectorAll('.accordion button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var open = b.getAttribute('aria-expanded') === 'true';
+    b.setAttribute('aria-expanded', String(!open));
+    document.getElementById(b.getAttribute('aria-controls')).hidden = open;
+  });
+});
+(function () {
+  var slides = document.querySelectorAll('.slide'), i = 0;
+  setInterval(function () { slides[i].hidden = true; i = (i + 1) % slides.length; slides[i].hidden = false; }, 3000);
+})();
+</script>
+
+
+</body></html>

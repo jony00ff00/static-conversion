@@ -1,0 +1,37 @@
+{
+  "name": "visualeditor",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Deterministic web-to-print visual editor: break HTML/CSS/JS into components and lay them out on A4 pages.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "golden": "tsx scripts/golden.ts",
+    "golden:update": "tsx scripts/golden.ts --update",
+    "fixtures:vendor": "tsx scripts/vendor-fixtures.ts",
+    "render": "tsx scripts/render.ts"
+  },
+  "dependencies": {
+    "pixelmatch": "8.0.0",
+    "playwright": "1.63.0",
+    "pngjs": "7.0.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@fontsource/inter": "5.1.0",
+    "@types/node": "26.6.6",
+    "@types/pngjs": "6.0.5",
+    "bootstrap": "5.3.3",
+    "chart.js": "4.4.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tailwindcss": "3.4.14",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
+  }
+}

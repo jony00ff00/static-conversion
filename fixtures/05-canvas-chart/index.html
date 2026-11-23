@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Canvas chart fixture</title>
+<style>body{margin:0;padding:32px;font-family:Arial,sans-serif;background:#fff}.row{display:flex;gap:32px}figure{margin:0}figcaption{font-size:14px;color:#555;margin-top:8px}</style></head>
+<body>
+<h1>Quarterly report</h1>
+<div class="row">
+  <figure><canvas id="bar" width="560" height="320"></canvas><figcaption>Revenue by quarter (£k)</figcaption></figure>
+  <figure><canvas id="line" width="560" height="320"></canvas><figcaption>Active customers</figcaption></figure>
+</div>
+<script src="vendor/chart.umd.js"></script>
+<script>
+  Chart.defaults.animation = false;
+  Chart.defaults.responsive = false;
+  Chart.defaults.devicePixelRatio = 1;
+  new Chart(document.getElementById('bar'), { type: 'bar', data: { labels: ['Q1','Q2','Q3','Q4'], datasets: [{ label: 'Revenue', data: [120, 150, 135, 190], backgroundColor: '#2563eb' }] } });
+  new Chart(document.getElementById('line'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun'], datasets: [{ label: 'Customers', data: [300, 320, 360, 410, 430, 480], borderColor: '#16a34a', tension: 0.3 }] } });
+</script>
+</body>
+</html>
