@@ -525,6 +525,331 @@
     return (dt ? '<!DOCTYPE ' + dt.name + '>' : '') + '\n' + clone.outerHTML + '\n';
   }
 
+  /* ----------------------------------------------------------------- presets */
+
+  /** Print presets, applied after settling and before IDs are stamped. */
+  function applyPresets(p) {
+    var report = { hidden: 0, expanded: 0, links: 0 };
+    if (p.hideChrome) {
+      Array.prototype.forEach.call(document.querySelectorAll('body *'), function (el) {
+        var cs = getComputedStyle(el);
+        var cookie = /(cookie|consent|gdpr)/i.test((el.id || '') + ' ' + (typeof el.className === 'string' ? el.className : '') + ' ' + (el.getAttribute('aria-label') || ''));
+        if (cs.position === 'fixed' || cs.position === 'sticky' || (cookie && (el.getAttribute('role') === 'dialog' || cs.position !== 'static'))) {
+          el.style.setProperty('display', 'none', 'important');
+          el.setAttribute('data-ve-preset', 'hidden');
+          report.hidden++;
+        }
+      });
+    }
+    if (p.expandInteractive) {
+      document.querySelectorAll('details:not([open])').forEach(function (d) { d.open = true; report.expanded++; });
+      document.querySelectorAll('[role=tabpanel][hidden], [role=tabpanel][aria-hidden=true]').forEach(function (t) {
+        t.hidden = false; t.removeAttribute('aria-hidden'); report.expanded++;
+      });
+      document.querySelectorAll('[aria-expanded=false][aria-controls]').forEach(function (b) {
+        var t = document.getElementById(b.getAttribute('aria-controls'));
+        if (t && t.getAttribute('role') !== 'tabpanel') { b.setAttribute('aria-expanded', 'true'); t.hidden = false; report.expanded++; }
+      });
+      document.querySelectorAll('[aria-roledescription=carousel], .carousel').forEach(function (c) {
+        c.style.setProperty('height', 'auto', 'important');
+        c.style.setProperty('overflow', 'visible', 'important');
+        Array.prototype.forEach.call(c.children, function (slide) {
+          slide.hidden = false;
+          slide.style.setProperty('position', 'relative', 'important');
+          slide.style.setProperty('inset', 'auto', 'important');
+          slide.style.setProperty('min-height', '160px');
+          report.expanded++;
+        });
+      });
+    }
+    if (p.linkUrls) {
+      document.querySelectorAll('a[href]').forEach(function (a) {
+        var href = a.getAttribute('href');
+        if (!/^https?:/i.test(href) || a.querySelector('[data-ve-link-url]')) return;
+        var s = document.createElement('span');
+        s.setAttribute('data-ve-link-url', '');
+        s.textContent = ' (' + href.replace(/^https?:\/\//, '') + ')';
+        a.appendChild(s);
+        report.links++;
+      });
+    }
+    return report;
+  }
+
+  /**
+   * Make the author's @media print rules part of the static document: every
+   * stylesheet is re-emitted with print rules unwrapped and screen-only rules
+   * dropped, so the frozen page shows the print styling on screen and in export.
+   */
+  function bakePrintMedia() {
+    var out = [];
+    var isPrint = function (m) { return /\bprint\b/i.test(m) && !/not\s+print/i.test(m); };
+    var isScreenOnly = function (m) { return /\bscreen\b/i.test(m) && !/\bprint\b/i.test(m); };
+    var absolutise = function (css, base) {
+      return css.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/g, function (all, q, u) {
+        if (/^(data:|blob:|#)/.test(u)) return all;
+        try { return 'url("' + new URL(u, base).href + '")'; } catch (e) { return all; }
+      });
+    };
+    var walk = function (rules, base) {
+      Array.prototype.forEach.call(rules, function (r) {
+        if (r.type === CSSRule.MEDIA_RULE) {
+          var m = r.media.mediaText;
+          if (isPrint(m)) walk(r.cssRules, base);
+          else if (!isScreenOnly(m)) out.push(absolutise(r.cssText, base));
+        } else if (r.type === CSSRule.IMPORT_RULE) {
+          if (r.styleSheet) walk(r.styleSheet.cssRules, r.styleSheet.href || base);
+        } else {
+          out.push(absolutise(r.cssText, base));
+        }
+      });
+    };
+    Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+      var owner = sheet.ownerNode;
+      if (owner && owner.hasAttribute && owner.hasAttribute('data-ve-static')) return;
+      var m = sheet.media && sheet.media.mediaText;
+      if (m && isScreenOnly(m)) return;
+      try { walk(sheet.cssRules, sheet.href || document.baseURI); } catch (e) { return; }
+    });
+    document.querySelectorAll('link[rel~=stylesheet], style:not([data-ve-static])').forEach(function (n) { n.remove(); });
+    var style = document.createElement('style');
+    style.setAttribute('data-ve-print-baked', '');
+    style.textContent = out.join('\n');
+    document.head.appendChild(style);
+    return out.length;
+  }
+
+  /* -------------------------------------------------------------- decompose */
+
+  var SEMANTIC = { HEADER: 'header', NAV: 'nav', FOOTER: 'footer', SECTION: 'section', ARTICLE: 'card', ASIDE: 'section', FIGURE: 'media', TABLE: 'table', FORM: 'section', BLOCKQUOTE: 'text', MAIN: 'section' };
+  var MEDIA = { IMG: 1, SVG: 1, VIDEO: 1, PICTURE: 1, CANVAS: 1, IFRAME: 1 };
+  var TEXT = { H1: 'text', H2: 'text', H3: 'text', H4: 'text', H5: 'text', H6: 'text', P: 'text', PRE: 'text', UL: 'list', OL: 'list', DL: 'list' };
+  var INLINE = { SPAN: 1, A: 1, STRONG: 1, EM: 1, B: 1, I: 1, LABEL: 1, SMALL: 1, CODE: 1, BR: 1, SUP: 1, SUB: 1, U: 1, S: 1, ABBR: 1, TIME: 1, MARK: 1 };
+  var SKIP = { SCRIPT: 1, STYLE: 1, LINK: 1, META: 1, NOSCRIPT: 1, TEMPLATE: 1, TITLE: 1, BASE: 1, HEAD: 1, OPTION: 1, SOURCE: 1, TRACK: 1, PATH: 1, G: 1 };
+
+  function opaque(c) { return c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c); }
+
+  function effectiveBg(el) {
+    for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
+      var c = getComputedStyle(e).backgroundColor;
+      if (opaque(c)) return c;
+    }
+    return 'rgb(255, 255, 255)';
+  }
+
+  function visibleBox(el) {
+    var cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+    var r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return null;
+    return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
+  }
+
+  function signature(el) {
+    var cls = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean).sort().join('.') : '';
+    var kids = Array.prototype.map.call(el.children, function (c) { return c.tagName; }).join(',');
+    return el.tagName + '.' + cls + '>' + kids;
+  }
+
+  /** Bottom of the lowest visible element (plus body padding/margin), CSS px. */
+  function contentHeight() {
+    var body = document.body, bottom = 0;
+    Array.prototype.forEach.call(body.querySelectorAll('*'), function (e) {
+      var r = e.getBoundingClientRect();
+      if (r.height > 0 && r.width > 0 && r.bottom + scrollY > bottom) bottom = r.bottom + scrollY;
+    });
+    var cs = getComputedStyle(body);
+    bottom += parseFloat(cs.paddingBottom) + parseFloat(cs.marginBottom);
+    var br = body.getBoundingClientRect();
+    return Math.ceil(Math.max(bottom, br.bottom + scrollY + parseFloat(cs.marginBottom)));
+  }
+
+  function ownTextLen(el) {
+    var n = 0;
+    el.childNodes.forEach(function (k) { if (k.nodeType === 3) n += k.textContent.trim().length; });
+    return n;
+  }
+  function hasBlockKids(el) {
+    return Array.prototype.some.call(el.children, function (k) {
+      var d = getComputedStyle(k).display;
+      return d !== 'inline' && d !== 'none' && d !== 'contents';
+    });
+  }
+
+  function headingText(el) {
+    var h = /^H[1-6]$/.test(el.tagName) ? el : el.querySelector('h1,h2,h3,h4,h5,h6,[role=heading]');
+    var t = h ? (h.innerText || h.textContent) : '';
+    return (t || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function minFont(el) {
+    var min = Infinity;
+    var all = [el].concat(Array.prototype.slice.call(el.querySelectorAll('*')));
+    all.forEach(function (e) {
+      var has = false;
+      e.childNodes.forEach(function (n) { if (n.nodeType === 3 && n.textContent.trim()) has = true; });
+      if (!has || !visibleBox(e)) return;
+      var f = parseFloat(getComputedStyle(e).fontSize);
+      if (f < min) min = f;
+    });
+    return isFinite(min) ? min : null;
+  }
+
+  function nameOf(el, kind) {
+    var t = headingText(el);
+    if (!t) t = el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') || '';
+    if (!t) {
+      // Join the text of leaf elements with spaces, so "Work About Contact"
+      // doesn't run together when the links have no whitespace between them.
+      var parts = [];
+      var tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (var n = tw.nextNode(); n && parts.length < 12; n = tw.nextNode()) {
+        var v = n.textContent.replace(/\s+/g, ' ').trim();
+        if (v && n.parentElement && visibleBox(n.parentElement)) parts.push(v);
+      }
+      t = parts.join(' ');
+    }
+    if (!t) t = kind === 'media' ? 'Image' : el.tagName.toLowerCase();
+    return t.length > 48 ? t.slice(0, 45).trim() + '…' : t;
+  }
+
+  /**
+   * Score every element as a possible component boundary. Elements scoring 2+
+   * become candidate components; nesting gives each a depth (1 = top level).
+   * `rules`: [{selector, action: 'component' | 'ignore'}] applied first.
+   */
+  function decompose(rules) {
+    var body = document.body;
+    var docW = Math.max(document.documentElement.scrollWidth, 1);
+    var pageArea = docW * Math.min(Math.max(document.documentElement.scrollHeight, 1), 1200);
+    var forced = new Set(), ignored = new Set();
+    (rules || []).forEach(function (r) {
+      try {
+        document.querySelectorAll(r.selector).forEach(function (e) { (r.action === 'ignore' ? ignored : forced).add(e); });
+      } catch (e) { /* bad selector: skip */ }
+    });
+
+    var info = new Map();
+    var walk = function (el, insideMedia) {
+      Array.prototype.forEach.call(el.children, function (c) {
+        var tag = c.tagName.toUpperCase();
+        if (SKIP[tag]) return;
+        var box = visibleBox(c);
+        if (!box) { if (getComputedStyle(c).display === 'contents') walk(c, insideMedia); return; }
+        var isMedia = !!MEDIA[tag] || c.getAttribute('data-ve-frozen') === 'canvas' || c.getAttribute('data-ve-frozen') === 'video';
+        var s = 0, kind = null;
+        if (!insideMedia) {
+          var cs = getComputedStyle(c);
+          if (SEMANTIC[tag]) { s += tag === 'MAIN' ? 1 : 3; kind = SEMANTIC[tag]; }
+          if (c.hasAttribute('data-component') || tag.indexOf('-') > 0) s += 3;
+          var parentBg = c.parentElement ? effectiveBg(c.parentElement) : 'rgb(255, 255, 255)';
+          var ownBg = cs.backgroundColor;
+          var boxed = (opaque(ownBg) && ownBg !== parentBg) || cs.backgroundImage !== 'none' ||
+            ['Top', 'Right', 'Bottom', 'Left'].some(function (sd) { return parseFloat(cs['border' + sd + 'Width']) > 0 && cs['border' + sd + 'Style'] !== 'none'; }) ||
+            cs.boxShadow !== 'none';
+          if (boxed) s += 2;
+          if (isMedia) { s += 3; kind = 'media'; }
+          if (TEXT[tag]) { s += 2; kind = kind || TEXT[tag]; }
+          else if (!kind && !isMedia && ownTextLen(c) >= 20 && !hasBlockKids(c)) { s += 2; kind = 'text'; }
+          if ((cs.display === 'grid' || cs.display === 'flex') && c.children.length >= 2) s += 1;
+          if (box.w >= docW * 0.9 && box.h >= 150) s += 1;
+          if (INLINE[tag] && !isMedia) s = 0;
+          if (!isMedia && !TEXT[tag] && box.w * box.h < pageArea * 0.005) s -= 2;
+          if (isMedia && (box.w < 24 || box.h < 24)) s = 0;
+          if (forced.has(c)) s = Math.max(s, 5);
+          if (ignored.has(c)) s = -99;
+          info.set(c, { el: c, s: s, kind: kind, box: box, boxed: boxed, media: isMedia });
+        }
+        if (!isMedia) walk(c, insideMedia);
+      });
+    };
+    walk(body, false);
+
+    // Repeated siblings (cards in a row): same structure, 2+ of them.
+    var groups = new Map();
+    info.forEach(function (v) {
+      // Climb through single-child wrappers (e.g. Bootstrap .col around a .card),
+      // so cards in separate wrappers still count as a repeated set.
+      var up = v.el, chain = '';
+      while (up.parentElement && up.parentElement !== body && up.parentElement.children.length === 1) {
+        up = up.parentElement;
+        chain += '<' + signature(up).split('>')[0];
+      }
+      var parent = up.parentElement;
+      var key = (parent ? parent.getAttribute('data-wp-id') : '') + '|' + signature(v.el) + chain;
+      v.sig = key;
+      groups.set(key, (groups.get(key) || 0) + 1);
+    });
+    info.forEach(function (v) {
+      v.repeat = groups.get(v.sig) >= 2 && v.el.children.length > 0 ? v.sig : null;
+      if (v.repeat && v.s > 0) v.s += 2;
+    });
+
+    // Wrappers: an element whose only visible child covers the same box keeps
+    // just one of the two (the higher score; the outer one on a tie).
+    info.forEach(function (v) {
+      var kids = Array.prototype.filter.call(v.el.children, function (k) { return info.has(k); });
+      if (kids.length !== 1) return;
+      var k = info.get(kids[0]);
+      var same = Math.abs(k.box.x - v.box.x) < 3 && Math.abs(k.box.y - v.box.y) < 3 && Math.abs(k.box.w - v.box.w) < 3 && Math.abs(k.box.h - v.box.h) < 3;
+      if (!same) return;
+      if (k.s > v.s) v.s = Math.min(v.s, 1); else k.s = Math.min(k.s, 1);
+    });
+
+    var nodes = [];
+    var cand = new Map();
+    info.forEach(function (v) { if (v.s >= 2) cand.set(v.el, v); });
+    // Pure wrappers (no box of their own, mostly filled by 2+ candidate
+    // children) are not components themselves: their children are.
+    cand.forEach(function (v) {
+      if (forced.has(v.el) || v.boxed || v.media || !/^(DIV|MAIN|SECTION)$/.test(v.el.tagName)) return;
+      var kids = [];
+      cand.forEach(function (k) {
+        if (k === v) return;
+        for (var a = k.el.parentElement; a; a = a.parentElement) {
+          if (a === v.el) { kids.push(k); break; }
+          if (cand.has(a)) break;
+        }
+      });
+      if (kids.length < 2) return;
+      var covered = kids.reduce(function (sum, k) { return sum + k.box.w * k.box.h; }, 0);
+      if (covered >= 0.85 * v.box.w * v.box.h) cand.delete(v.el);
+    });
+    cand.forEach(function (v) {
+      var parent = null, depth = 1;
+      for (var a = v.el.parentElement; a && a !== body; a = a.parentElement) {
+        if (cand.has(a)) { if (!parent) parent = a; depth++; }
+      }
+      var kind = v.kind;
+      if (!kind || kind === 'section') {
+        if (v.repeat || (v.boxed && headingText(v.el) && v.box.w < docW * 0.7)) kind = 'card';
+        else if (!kind) kind = v.box.w >= docW * 0.9 ? 'section' : 'group';
+      }
+      if (v.el.tagName === 'TABLE') kind = 'table';
+      nodes.push({
+        wpId: v.el.getAttribute('data-wp-id'),
+        parentWpId: parent ? parent.getAttribute('data-wp-id') : null,
+        depth: depth,
+        tag: v.el.tagName.toLowerCase(),
+        kind: kind,
+        name: nameOf(v.el, kind),
+        score: v.s,
+        bbox: v.box,
+        bg: effectiveBg(v.el),
+        repeatKey: v.repeat,
+        minFontPx: minFont(v.el),
+        atomic: v.media,
+      });
+    });
+    nodes.sort(function (a, b) { return a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x || a.depth - b.depth; });
+    return {
+      nodes: nodes,
+      pageBg: effectiveBg(body),
+      bodyWpId: body.getAttribute('data-wp-id'),
+      documentHeightPx: contentHeight(),
+    };
+  }
+
   Object.defineProperty(window, '__ve', {
     value: Object.freeze({
       freezeAnimations: freezeAnimations,
@@ -539,6 +864,9 @@
       fontFacts: fontFacts,
       measure: measure,
       serializeDom: serializeDom,
+      applyPresets: applyPresets,
+      bakePrintMedia: bakePrintMedia,
+      decompose: decompose,
     }),
     enumerable: false,
   });

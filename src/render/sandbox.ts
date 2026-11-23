@@ -314,7 +314,27 @@ export async function freezePage(s: SandboxSession, opts: { videoTimeSec?: numbe
 
 /* ------------------------------------------------------------------ render */
 
+export interface CapturePresets {
+  hideChrome: boolean;
+  expandInteractive: boolean;
+  printMedia: boolean;
+  linkUrls: boolean;
+}
+
+export interface DecompositionResult {
+  nodes: import('../model/types.js').AnalysisNode[];
+  pageBg: string;
+  bodyWpId: string;
+  documentHeightPx: number;
+}
+
 export interface RenderOptions extends SandboxOptions {
+  /** Recorded interactions to replay after loading ("Capture this state"). */
+  setupSteps?: Array<{ action: 'click'; selector: string }>;
+  /** Print presets applied before IDs are stamped. */
+  presets?: CapturePresets;
+  /** Run component decomposition (with saved rules) after freezing. */
+  decompose?: { rules: Array<{ selector: string; action: 'component' | 'ignore' }> };
   /** Freeze JS output into static content (default true). */
   freeze?: boolean;
   /** Also screenshot before freezing, for comparing (slower; used by tests). */
@@ -345,6 +365,9 @@ export interface CaptureResult {
   freeze: FreezeReport | null;
   fonts: FontReport | null;
   measure: Measure;
+  decomposition: DecompositionResult | null;
+  presetReport: { hidden: number; expanded: number; links: number } | null;
+  stepErrors: string[];
 }
 
 export interface RenderResult extends CaptureResult {
@@ -370,6 +393,25 @@ export async function settlePage(s: SandboxSession, url: string) {
 export async function captureInSession(s: SandboxSession, url: string, opts: RenderOptions = {}): Promise<CaptureResult> {
   const { page } = s;
   await settlePage(s, url);
+  const stepErrors: string[] = [];
+  for (const step of opts.setupSteps ?? []) {
+    try {
+      await page.locator(step.selector).first().click({ timeout: 2_000 });
+      await page.evaluate('window.__ve.waitForAssets()');
+    } catch (e) {
+      stepErrors.push(`${step.action} ${step.selector}: ${(e as Error).message.split('\n')[0]}`);
+    }
+  }
+  if (opts.setupSteps?.length) {
+    await page.evaluate('window.__ve.freezeAnimations()');
+    await page.evaluate('window.__ve.stopTimers()');
+  }
+  let presetReport: CaptureResult['presetReport'] = null;
+  if (opts.presets) {
+    if (opts.presets.printMedia) await page.emulateMedia({ media: 'print' });
+    presetReport = (await page.evaluate(`window.__ve.applyPresets(${JSON.stringify(opts.presets)})`)) as CaptureResult['presetReport'];
+    await page.evaluate('window.__ve.waitForAssets()');
+  }
   const wpIdCount = (await page.evaluate('window.__ve.stampWpIds()')) as number;
   const unstampedCount = (await page.evaluate('window.__ve.countUnstamped()')) as number;
   const fontUrls = s.requests.filter((r) => r.type === 'font').map((r) => r.url);
@@ -377,10 +419,32 @@ export async function captureInSession(s: SandboxSession, url: string, opts: Ren
   const shot = () => page.screenshot({ fullPage: opts.fullPage ?? true, animations: 'disabled', caret: 'hide' });
   const screenshotBeforeFreeze = opts.verifyFreeze ? await shot() : undefined;
   const freeze = opts.freeze === false ? null : await freezePage(s, { videoTimeSec: opts.videoTimeSec });
+  if (opts.presets?.printMedia) {
+    // Keep the print styling once the frozen page is shown on screen.
+    await page.evaluate('window.__ve.bakePrintMedia()');
+    await page.emulateMedia({ media: 'screen' });
+    await page.evaluate('window.__ve.waitForAssets()');
+  }
+  const decomposition = opts.decompose
+    ? ((await page.evaluate(`window.__ve.decompose(${JSON.stringify(opts.decompose.rules)})`)) as DecompositionResult)
+    : null;
   const measure = (await page.evaluate('window.__ve.measure()')) as Measure;
   const screenshot = await shot();
   const html = (await page.evaluate('window.__ve.serializeDom()')) as string;
-  return { html, screenshot, screenshotBeforeFreeze, baseUrl: page.url(), wpIdCount, unstampedCount, fonts, freeze, measure };
+  return {
+    html,
+    screenshot,
+    screenshotBeforeFreeze,
+    baseUrl: page.url(),
+    wpIdCount,
+    unstampedCount,
+    fonts,
+    freeze,
+    measure,
+    decomposition,
+    presetReport,
+    stepErrors,
+  };
 }
 
 /** Render a source: settle, stamp, collect fonts, freeze, screenshot, serialise. */

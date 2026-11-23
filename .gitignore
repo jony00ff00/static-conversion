@@ -2,3 +2,4 @@ node_modules/
 dist/
 .golden-diff/
 *.log
+data/

@@ -8,8 +8,20 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "jsx": "react-jsx"
   },
-  "include": ["src", "scripts", "tests", "vitest.config.ts"]
+  "include": [
+    "src",
+    "scripts",
+    "tests",
+    "vitest.config.ts"
+  ]
 }

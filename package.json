@@ -15,10 +15,13 @@
     "fixtures:vendor": "tsx scripts/vendor-fixtures.ts",
     "render": "tsx scripts/render.ts",
     "export": "tsx scripts/export.ts",
-    "export:test-page": "tsx scripts/export-test-page.ts"
+    "export:test-page": "tsx scripts/export-test-page.ts",
+    "dev": "tsx src/server/server.ts",
+    "start": "tsx src/server/server.ts"
   },
   "dependencies": {
     "fflate": "0.8.3",
+    "linkedom": "0.18.15",
     "pdf-lib": "1.17.1",
     "pixelmatch": "8.0.0",
     "playwright": "1.63.0",
@@ -29,8 +32,12 @@
     "@fontsource/inter": "5.1.0",
     "@types/node": "26.6.6",
     "@types/pngjs": "6.0.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "axe-core": "4.14.1",
     "bootstrap": "5.3.3",
     "chart.js": "4.4.4",
+    "esbuild": "0.28.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "tailwindcss": "3.4.14",
