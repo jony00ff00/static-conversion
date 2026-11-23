@@ -15,6 +15,8 @@ import {
   saveProject,
 } from './projects.js';
 import { FIXTURE_ORIGIN, resolveFixturePath } from '../render/sandbox.js';
+import { RECORDER } from '../render/recorder.js';
+import { clientBuildOptions } from '../build/client.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 
@@ -36,23 +38,9 @@ const MIME: Record<string, string> = {
   '.webm': 'video/webm',
 };
 
-/** Injected into the live preview: reports clicks so they can be replayed ("Capture this state"). */
-const RECORDER = `<script data-ve-recorder>(function(){function sel(el){var parts=[];while(el&&el.nodeType===1&&el!==document.documentElement){var tag=el.tagName.toLowerCase();if(el.id&&/^[A-Za-z][\\w-]*$/.test(el.id)){parts.unshift('#'+el.id);break;}var n=1,s=el.previousElementSibling;while(s){if(s.tagName===el.tagName)n++;s=s.previousElementSibling;}parts.unshift(tag+':nth-of-type('+n+')');el=el.parentElement;}return parts.join(' > ');}document.addEventListener('click',function(e){parent.postMessage({type:'ve-click',selector:sel(e.target)},'*');},true);})();</script>`;
-
 let bundle: Promise<string> | null = null;
 export function clientBundle(): Promise<string> {
-  bundle ??= build({
-    entryPoints: [path.join(ROOT, 'src', 'client', 'main.tsx')],
-    bundle: true,
-    write: false,
-    format: 'esm',
-    jsx: 'automatic',
-    target: 'es2022',
-    minify: false,
-    sourcemap: 'inline',
-    define: { 'process.env.NODE_ENV': '"production"' },
-    logLevel: 'silent',
-  }).then((r) => r.outputFiles[0]!.text);
+  bundle ??= build({ ...clientBuildOptions({ static: false }), write: false, minify: false, sourcemap: 'inline' }).then((r) => r.outputFiles![0]!.text);
   return bundle;
 }
 

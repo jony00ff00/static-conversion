@@ -17,7 +17,9 @@
     "export": "tsx scripts/export.ts",
     "export:test-page": "tsx scripts/export-test-page.ts",
     "dev": "tsx src/server/server.ts",
-    "start": "tsx src/server/server.ts"
+    "start": "tsx src/server/server.ts",
+    "build:static": "tsx scripts/build-static.ts",
+    "preview:static": "tsx scripts/serve-static.ts"
   },
   "dependencies": {
     "fflate": "0.8.3",

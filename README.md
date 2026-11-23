@@ -9,6 +9,7 @@ an editable print preview, and the result exports at print quality. No LLM is us
 - Milestone checks: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md), [`docs/M2-M6-CHECKLIST.md`](docs/M2-M6-CHECKLIST.md)
 - Final review (the only manual check): [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)
 - Sample outputs: [`docs/samples/`](docs/samples/)
+- **Try it in the browser:** https://jony00ff00.github.io/static-conversion/ (browser-only version, see [`docs/STATIC.md`](docs/STATIC.md))
 
 ## Status: M6 — editor with decomposition, arranging, content editing and multi-page flow
 
@@ -25,6 +26,7 @@ an editable print preview, and the result exports at print quality. No LLM is us
 | Pagination: layout measurement and break rules | `src/flow/` |
 | Editor server and API | `src/server/` |
 | Editor UI (React) | `src/client/` |
+| Browser-only build for GitHub Pages (in-browser capture, IndexedDB, service worker) | `src/static/`, `scripts/build-static.ts` |
 | Golden-file comparison | `src/golden/` |
 | 12 test fixtures, plus freeze fixtures | `fixtures/`, `tests/freeze-fixtures/` |
 | Golden outputs (DOM, screenshot, A4 export, summary) | `golden/` |
@@ -66,6 +68,8 @@ npm run export:test-page -- margin-test-page.pdf
 | `npm run dev` | Start the editor at http://localhost:5173 (`PORT` to change; projects are stored in `data/`) |
 | `npm test` | Every automated check, unit and end-to-end (about 4 minutes) |
 | `npm run typecheck` | TypeScript check |
+| `npm run build:static` | Build the browser-only version into `dist-static/` (published to GitHub Pages from `main`) |
+| `npm run preview:static` | Serve `dist-static/` at http://localhost:5174/static-conversion/, as Pages does |
 | `npm run golden` | Render all fixtures and compare with `golden/` (diffs go to `.golden-diff/`) |
 | `npm run golden:update` | Rewrite the golden files. **Review the changed images before committing.** |
 | `npm run export -- <input> <out.pdf\|out.png> [options]` | Export a folder, .zip, .html file or URL to one A4 page. Options: `--margins=t,r,b,l`, `--landscape`, `--fit=clip\|shrink`, `--capture-width=px`, `--dpi=300`, `--guides`, `--report=file.json` |

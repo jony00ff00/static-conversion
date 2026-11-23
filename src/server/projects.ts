@@ -4,9 +4,10 @@ import path from 'node:path';
 import { parseHTML } from 'linkedom';
 import { isolateComponent } from '../compose/isolate.js';
 import { composeDocumentHtml, composePageHtml, type HtmlFor } from '../compose/page.js';
-import { computeSlices, type FlowLayout } from '../flow/breaks.js';
+import type { FlowLayout } from '../flow/breaks.js';
+import { autoPaginateDoc, reflowChainDoc } from '../flow/paginate.js';
 import { contentRectMm, mmToPx, trimMm } from '../model/geometry.js';
-import { flowOntoPages, newEditorDocument, setChainSlices } from '../model/ops.js';
+import { newEditorDocument } from '../model/ops.js';
 import type { Analysis, ComponentDef, EditorDocument, Snapshot } from '../model/types.js';
 import { setExactPageSize } from '../export/pdf.js';
 import { cropPng, setPngDpi } from '../export/png.js';
@@ -230,28 +231,11 @@ export async function measureFlow(s: ProjectState, def: ComponentDef, widthPx: n
 }
 
 /** Auto-paginate a component onto as many full-content-area pages as needed. */
-export async function autoPaginate(s: ProjectState, componentId: string, startPageId: string) {
-  const def = s.document.components[componentId];
-  if (!def) throw new Error(`unknown component ${componentId}`);
-  const c = contentRectMm(s.document.pageSetup);
-  const layout = await measureFlow(s, def, mmToPx(c.w));
-  const probe = computeSlices(layout, [{ placementId: 'probe', heightPx: mmToPx(c.h) }], { unlimited: true });
-  const pageCount = probe.filter((x) => x.endPx > x.startPx).length || 1;
-  let doc = flowOntoPages(s.document, componentId, startPageId, pageCount);
-  const chain = doc.chains[doc.chains.length - 1]!;
-  const frames = chain.placementIds.map((id) => ({ placementId: id, heightPx: mmToPx(doc.placements.find((p) => p.id === id)!.hMm) }));
-  doc = setChainSlices(doc, chain.id, computeSlices(layout, frames));
-  return { document: doc, layout, chainId: chain.id };
+export function autoPaginate(s: ProjectState, componentId: string, startPageId: string) {
+  return autoPaginateDoc(s.document, componentId, startPageId, (def, w) => measureFlow(s, def, w));
 }
 
 /** Recompute slices for an existing chain (after frames were linked, moved or resized). */
-export async function reflowChain(s: ProjectState, chainId: string) {
-  const chain = s.document.chains.find((c) => c.id === chainId);
-  if (!chain) throw new Error(`unknown chain ${chainId}`);
-  const def = s.document.components[chain.componentId]!;
-  const frames = chain.placementIds.map((id) => s.document.placements.find((p) => p.id === id)!);
-  const width = mmToPx(frames[0]!.wMm); // frames in a chain share the first frame's width for layout
-  const layout = await measureFlow(s, def, width);
-  const slices = computeSlices(layout, frames.map((f) => ({ placementId: f.id, heightPx: mmToPx(f.hMm) })));
-  return { document: setChainSlices(s.document, chainId, slices), layout };
+export function reflowChain(s: ProjectState, chainId: string) {
+  return reflowChainDoc(s.document, chainId, (def, w) => measureFlow(s, def, w));
 }

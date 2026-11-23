@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { api, type ProjectPayload } from './api.js';
-import { clientBaseUrl, frozenForPane, pageHtml, parse } from './render.js';
+import { clientBaseUrl, frozenForPane, liveUrl, pageHtml, parse } from './render.js';
+import { homeHref } from './nav.js';
+import { IS_STATIC } from '../static/env.js';
 import { buildTree, commonAncestor, defFromItem, flattenTree, type TreeItem } from '../compose/tree.js';
 import { ownText } from '../compose/isolate.js';
 import { contentRectMm, gridColumnsMm, mmToPx, PX_PER_MM, pxToMm, pxToPt, trimMm, type Rect } from '../model/geometry.js';
@@ -714,6 +716,7 @@ export function Editor({ projectId }: { projectId: string }) {
     try {
       await api.save(projectId, doc);
       const blob = await api.exportPdf(projectId);
+      if (!blob) return; // static build: the print dialog was opened instead
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `${project.meta.title.replace(/[^\w-]+/g, '-') || 'export'}.pdf`;
@@ -775,7 +778,7 @@ export function Editor({ projectId }: { projectId: string }) {
   return (
     <div className="editor" onPointerUp={() => drag?.kind !== 'place' && onOverlayUp()}>
       <header className="toolbar">
-        <a href="/" className="brand">Static Conversion</a>
+        <a href={homeHref()} className="brand">Static Conversion</a>
         <strong className="title">{project.meta.title}</strong>
         <button onClick={undo} disabled={!historyRef.current?.canUndo} aria-label="Undo">↶ Undo</button>
         <button onClick={redo} disabled={!historyRef.current?.canRedo} aria-label="Redo">↷ Redo</button>
@@ -794,7 +797,7 @@ export function Editor({ projectId }: { projectId: string }) {
         <label>
           <input type="checkbox" checked={doc.showGrid} onChange={(e) => commit((d) => ({ ...d, showGrid: e.target.checked }))} /> Grid
         </label>
-        <button onClick={exportPdf} className="primary">Export PDF</button>
+        <button onClick={exportPdf} className="primary">{IS_STATIC ? 'Print / Save PDF' : 'Export PDF'}</button>
         {busy && <span role="status" className="status">{busy}</span>}
       </header>
 
@@ -883,7 +886,7 @@ export function Editor({ projectId }: { projectId: string }) {
                     style={{ width: doc.captureWidthPx, height: h, transform: `scale(${ws})`, transformOrigin: '0 0' }}
                   />
                 ) : (
-                  <iframe title="Live web page" className="web-frame live" sandbox="allow-scripts allow-forms" src={`/api/projects/${projectId}/live/${(project.meta.source as unknown as { entry: string }).entry ?? 'index.html'}`} style={{ width: doc.captureWidthPx, height: h, transform: `scale(${ws})`, transformOrigin: '0 0' }} />
+                  <iframe title="Live web page" className="web-frame live" sandbox={IS_STATIC ? 'allow-scripts allow-forms allow-same-origin' : 'allow-scripts allow-forms'} src={liveUrl(projectId, (project.meta.source as unknown as { entry?: string }).entry ?? 'index.html')} style={{ width: doc.captureWidthPx, height: h, transform: `scale(${ws})`, transformOrigin: '0 0' }} />
                 )}
               </div>
             );
@@ -912,7 +915,7 @@ export function Editor({ projectId }: { projectId: string }) {
             <div key={pg.id} className="page-wrap">
               <div className="page-head">
                 <span>Page {pi + 1}</span>
-                <button onClick={() => doProof(pg.id)} aria-pressed={!!pf}>{pf ? 'Hide proof' : 'Proof'}</button>
+                {!IS_STATIC && <button onClick={() => doProof(pg.id)} aria-pressed={!!pf}>{pf ? 'Hide proof' : 'Proof'}</button>}
                 {pf && (
                   <>
                     <label>Opacity <input type="range" min={0} max={1} step={0.05} value={pf.opacity} onChange={(e) => setProof((p) => ({ ...p, [pg.id]: { ...pf, opacity: Number(e.target.value) } }))} /></label>

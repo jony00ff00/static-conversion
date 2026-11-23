@@ -3,3 +3,5 @@ dist/
 .golden-diff/
 *.log
 data/
+dist-static/
+.scratch/

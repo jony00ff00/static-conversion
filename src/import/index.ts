@@ -4,13 +4,9 @@ import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/prom
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { dirSource, type RenderSource } from '../render/sandbox.js';
+import { ZIP_LIMITS, buildPastedHtml, pickEntry, safeZipPath as safeZipPathImpl } from './pure.js';
 
-/** Limits for zip imports (protect against zip bombs and junk uploads). */
-export const ZIP_LIMITS = {
-  maxFiles: 5_000,
-  maxTotalBytes: 200 * 1024 * 1024,
-  maxFileBytes: 50 * 1024 * 1024,
-} as const;
+export { ZIP_LIMITS, buildPastedHtml, pickEntry, safeZipPath } from './pure.js';
 
 export class ImportError extends Error {
   constructor(message: string) {
@@ -44,21 +40,7 @@ export async function importPaste(
   input: { html: string; css?: string; js?: string },
   opts: { parentDir?: string } = {},
 ): Promise<Imported> {
-  let html = input.html.trim();
-  if (!/<html[\s>]/i.test(html)) {
-    html = `<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="utf-8"><title>Pasted</title></head>\n<body>\n${html}\n</body>\n</html>`;
-  } else if (!/<!doctype/i.test(html)) {
-    html = `<!DOCTYPE html>\n${html}`;
-  }
-  if (!/<head[\s>]/i.test(html)) html = html.replace(/<html([^>]*)>/i, '<html$1><head><meta charset="utf-8"></head>');
-  if (input.css) {
-    const style = `<style data-ve-pasted>\n${input.css.replace(/<\/style/gi, '<\\/style')}\n</style>`;
-    html = html.replace(/<\/head>/i, `${style}\n</head>`);
-  }
-  if (input.js) {
-    const script = `<script data-ve-pasted>\n${input.js.replace(/<\/script/gi, '<\\/script')}\n</script>`;
-    html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}\n</body>`) : html + script;
-  }
+  const html = buildPastedHtml(input);
   const dir = await newImportDir(opts.parentDir);
   await writeFile(path.join(dir, 'index.html'), html);
   return { source: dirSource(dir, 'index.html'), dir, kind: 'paste' };
@@ -82,11 +64,9 @@ export async function findEntry(root: string): Promise<string> {
     }
   };
   await walk('', 0);
-  if (!htmls.length) throw new ImportError('No .html file found in the import.');
-  const depth = (p: string) => p.split(path.sep).length;
-  const index = htmls.filter((p) => /^index\.html?$/i.test(path.basename(p))).sort((a, b) => depth(a) - depth(b) || a.localeCompare(b));
-  if (index[0] && depth(index[0]) <= 2) return index[0];
-  return htmls.sort((a, b) => depth(a) - depth(b) || a.localeCompare(b))[0]!;
+  const entry = pickEntry(htmls.map((h) => h.split(path.sep).join('/')));
+  if (!entry) throw new ImportError('No .html file found in the import.');
+  return entry.split('/').join(path.sep);
 }
 
 /** Use a directory in place (files are served read-only from it). */
@@ -98,15 +78,6 @@ export async function importDirectory(dir: string, entry?: string): Promise<Impo
 }
 
 /* -------------------------------------------------------------------- zip */
-
-/** Reject absolute paths, drive letters and any `..` segment (zip-slip). */
-export function safeZipPath(name: string): string | null {
-  const n = name.replace(/\\/g, '/');
-  if (n.startsWith('/') || /^[a-zA-Z]:/.test(n)) return null;
-  const parts = n.split('/').filter((p) => p !== '' && p !== '.');
-  if (!parts.length || parts.some((p) => p === '..')) return null;
-  return parts.join('/');
-}
 
 /** Extract a zip into a new import directory, with size and path checks. */
 export async function importZip(zip: Buffer | string, opts: { parentDir?: string } = {}): Promise<Imported> {
@@ -133,7 +104,7 @@ export async function importZip(zip: Buffer | string, opts: { parentDir?: string
   const dir = await newImportDir(opts.parentDir);
   const rejected: string[] = [];
   for (const [name, data] of Object.entries(files)) {
-    const safe = safeZipPath(name);
+    const safe = safeZipPathImpl(name);
     if (!safe) {
       rejected.push(name);
       continue;

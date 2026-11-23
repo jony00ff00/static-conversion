@@ -2,12 +2,15 @@
 import { isolateComponent } from '../compose/isolate.js';
 import { composePageHtml, type HtmlFor } from '../compose/page.js';
 import type { ComponentDef, EditorDocument } from '../model/types.js';
+import { IS_STATIC, vfsUrl } from '../static/env.js';
 
 const parser = typeof DOMParser !== 'undefined' ? new DOMParser() : null;
 export const parse = (html: string) => parser!.parseFromString(html, 'text/html');
 
 /** Base URL that resolves the source's relative assets through the editor server. */
 export function clientBaseUrl(projectId: string, analysisBaseUrl: string): string {
+  // Static build: the capture already ran at the service-worker URL the assets live at.
+  if (IS_STATIC) return analysisBaseUrl;
   let pathname = '/';
   try {
     pathname = new URL(analysisBaseUrl).pathname;
@@ -15,6 +18,11 @@ export function clientBaseUrl(projectId: string, analysisBaseUrl: string): strin
     /* keep / */
   }
   return `${location.origin}/api/projects/${projectId}/src${pathname}`;
+}
+
+/** Live (scripts running) preview of the source's entry page. */
+export function liveUrl(projectId: string, entry: string): string {
+  return IS_STATIC ? vfsUrl(projectId, entry, 'live') : `/api/projects/${projectId}/live/${entry}`;
 }
 
 const cache = new Map<string, string>();

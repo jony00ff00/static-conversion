@@ -2,6 +2,9 @@ import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { Editor } from './Editor.js';
+import { currentProjectId, goToProject, projectHref } from './nav.js';
+import { IS_STATIC, appBase } from '../static/env.js';
+import { UNSUPPORTED_URL } from '../static/backend.js';
 
 function Home() {
   const [fixtures, setFixtures] = useState<string[]>([]);
@@ -23,8 +26,7 @@ function Home() {
     setError('');
     try {
       const p = await api.create(input);
-      history.pushState(null, '', `/project/${p.meta.id}`);
-      dispatchEvent(new PopStateEvent('popstate'));
+      goToProject(p.meta.id);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -44,6 +46,13 @@ function Home() {
     <main className="home">
       <h1>Static Conversion</h1>
       <p className="muted">Turn a web page into print-ready A4 pages.</p>
+      {IS_STATIC && (
+        <p className="notice" data-testid="static-notice">
+          Browser-only version: your projects stay in this browser. Importing from a web address, the Proof overlay and exact
+          PDF files need the <a href="https://github.com/jony00ff00/static-conversion#readme">local version</a>; here, export
+          opens the print dialog (choose “Save as PDF”, paper A4, margins none).
+        </p>
+      )}
       {busy && <p role="status" className="status">{busy}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       <section className="home-grid">
@@ -57,8 +66,9 @@ function Home() {
         <div className="card">
           <h2>Upload or link</h2>
           <label>Zip file<input type="file" accept=".zip" aria-label="Zip file" onChange={(e) => onZip(e.target.files?.[0])} /></label>
-          <label>Web address<input type="url" aria-label="Web address" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
-          <button disabled={!!busy || !url} onClick={() => go('Recording page…', { type: 'url', url })}>Import from URL</button>
+          <label>Web address<input type="url" aria-label="Web address" placeholder="https://…" value={url} disabled={IS_STATIC} onChange={(e) => setUrl(e.target.value)} /></label>
+          <button disabled={!!busy || !url || IS_STATIC} onClick={() => go('Recording page…', { type: 'url', url })}>Import from URL</button>
+          {IS_STATIC && <p className="muted small">{UNSUPPORTED_URL}</p>}
         </div>
         <div className="card">
           <h2>Test pages</h2>
@@ -77,7 +87,7 @@ function Home() {
           <ul className="plain">
             {projects.slice(0, 12).map((p) => (
               <li key={p.id}>
-                <a href={`/project/${p.id}`}>{p.title}</a> <span className="muted">{new Date(p.createdAt).toLocaleString()}</span>
+                <a href={projectHref(p.id)}>{p.title}</a> <span className="muted">{new Date(p.createdAt).toLocaleString()}</span>
               </li>
             ))}
             {!projects.length && <li className="muted">None yet.</li>}
@@ -89,14 +99,39 @@ function Home() {
 }
 
 function App() {
-  const [path, setPath] = useState(location.pathname);
+  const [projectId, setProjectId] = useState(currentProjectId);
   useEffect(() => {
-    const on = () => setPath(location.pathname);
+    const on = () => setProjectId(currentProjectId());
     addEventListener('popstate', on);
-    return () => removeEventListener('popstate', on);
+    addEventListener('hashchange', on);
+    return () => {
+      removeEventListener('popstate', on);
+      removeEventListener('hashchange', on);
+    };
   }, []);
-  const m = /^\/project\/([a-z0-9-]+)/.exec(path);
-  return m ? <Editor projectId={m[1]!} /> : <Home />;
+  return projectId ? <Editor key={projectId} projectId={projectId} /> : <Home />;
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+/** Static build: imported files are served to the capture frames by a service worker. */
+async function startServiceWorker() {
+  if (!('serviceWorker' in navigator)) throw new Error('This browser does not support service workers, which the browser-only version needs.');
+  await navigator.serviceWorker.register(`${appBase()}sw.js`, { scope: appBase() });
+  await navigator.serviceWorker.ready;
+  if (!navigator.serviceWorker.controller) {
+    await new Promise<void>((resolve) => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+      setTimeout(resolve, 3_000);
+    });
+  }
+  if (!navigator.serviceWorker.controller) location.reload();
+}
+
+const root = createRoot(document.getElementById('root')!);
+if (IS_STATIC) {
+  startServiceWorker().then(
+    () => root.render(<App />),
+    (e) => root.render(<main className="home"><p role="alert" className="error">{(e as Error).message}</p></main>),
+  );
+} else {
+  root.render(<App />);
+}
