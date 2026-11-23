@@ -1,5 +1,5 @@
 {
-  "name": "visualeditor",
+  "name": "static-converter",
   "version": "0.0.1",
   "private": true,
   "description": "Deterministic web-to-print visual editor: break HTML/CSS/JS into components and lay them out on A4 pages.",

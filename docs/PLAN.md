@@ -98,22 +98,48 @@ rule-based and gives the same result every time.
 
 ## Milestones
 
-Each milestone lists its **automated checks** (exit criteria in CI) and its
-**👤 user checks** (a person must look at or print the output and sign off).
+From M2 onwards **no milestone waits for a person to look at or print anything**. Each
+check that used to need a person has an automated stand-in that runs in CI. The user
+reviews once, at the end, using the final acceptance pack ([`ACCEPTANCE.md`](ACCEPTANCE.md)).
 
-| # | Milestone | Key automated checks | 👤 User checks |
-|---|---|---|---|
-| **M0** | Foundations: schema, sandbox, 12-fixture corpus, golden runner, CI | Fixtures render < 30 s with no errors; outside network blocked; infinite loop killed; renders repeat exactly; every element stamped | Compare fixture screenshots with a real browser (`docs/M0-CHECKLIST.md`) |
-| **M1** | Render core and single-page A4 export; font collection; JS freezing | PDF page box 595.28 × 841.89 pt; PNG 2480 × 3508; content box at (15, 20) mm ±0.1; fonts embedded; canvas/SVG diff < 0.5% | Print at **100%** and measure margins with a ruler (±1 mm); fonts correct; charts sharp |
-| **M2** | Side-by-side preview, linked selection, Proof view | Selection lines up across panes; editor vs Proof < 1% pixel diff; 100% zoom = 793.7 × 1122.5 px | Click-test highlights; on-screen ruler calibration; Proof shows no visible differences |
-| **M3** | Decomposition, component library, rules and presets, CSS extraction | Golden component trees at 3 granularities; isolated component vs source < 1% diff; presets work | Components make sense; names are sensible; check components that fell back to inlining; screen-only clutter hidden correctly |
-| **M4** | Arrange editing, margin inspector, snapping, capture width | Margin validation; placements don't move when margins change; snapping within 0.1 mm; landscape is 297 × 210 | Print unusual margins and measure; layout feels accurate; body text ≥ about 9 pt |
-| **M5** | Content and style editing, overrides, undo | One override and one undo step per edit; revert gives a pixel-exact original; web source untouched | Edits show in editor and Proof; full undo works; special characters correct in the PDF |
-| **M6** | Fit and flow: modes, overflow, auto-paginate, linked frames (last) | No lines cut at page breaks; table headers repeat; no text lost or duplicated in linked frames | Read the paginated article for bad page breaks |
-| **M7** | Source sync and re-mapping, Changes panel | ≥ 95% correct sorting on scripted source changes; no overrides lost | Review every "changed" item; decide on orphaned components |
-| **M8** | Print production: bleed, CMYK PDF/X, preflight, soft proof | PDF/X validates; vectors kept; each preflight rule fires on its trigger fixture | **Physical test print** and colour sign-off; trim at crop marks; printer's preflight approval |
-| **M9** | A4 templates, auto-pack, masters, data merge, patch export | Templates stay inside margins; tri-fold panels 99 mm; auto-pack repeats exactly; 50 CSV rows → 50 pages | Fold the tri-fold; cut the step-and-repeat sheet; spot-check the merge; developer applies a patch |
-| **M10** | Hardening and release | 20 pages / 200 components stay smooth; export < 60 s; crash recovery | End-to-end test on three real sites; a new user completes a project from the docs |
+### How person-based checks are replaced
+
+| Previously a person did this | Now automated as |
+|---|---|
+| Look at output and confirm it's right | Golden images with pixel-diff tolerances, plus a structural check of the DOM |
+| Measure margins with a ruler | Geometry checked in the PDF itself and in rasterised PNGs, ±0.1 mm |
+| Click around and confirm selection and highlights work | Playwright end-to-end tests that click, drag and type in the real editor |
+| "Does it feel accurate?" (snapping, dragging) | Scripted drags with mm assertions on final positions; frame-time limits |
+| Read for bad page breaks | Layout rule checks: no heading last on a page, no single stranded lines, table headers repeated, all text present exactly once |
+| "Do the components make sense?" | Labelled reference trees for the fixtures, scored with boundary precision/recall |
+| Check fonts and special characters | PDF font embedding plus text extraction compared with the source text; Unicode round-trip tests |
+| Colour sign-off on paper | ΔE2000 between source colours and the ICC soft proof; out-of-gamut warnings |
+| Fold or cut printed sheets | Panel, fold and cut-mark positions checked in the PDF to ±0.1 mm |
+| A developer applies a patch | The exported patch is applied to the fixture, re-rendered, and compared with the edited print version |
+| A new user follows the docs | Every command and example in the docs runs as a test |
+
+### Milestone list
+
+| # | Milestone | Automated exit checks |
+|---|---|---|
+| **M0** ✅ | Foundations: schema, sandbox, 12-fixture corpus, golden runner, CI | Fixtures render < 30 s with no errors; outside network blocked; infinite loop killed; renders repeat exactly; every element stamped |
+| **M1** ✅ | Import (paste, folder, zip, URL); JS freezing; font report; single-page A4 PDF/PNG export | Page box exactly A4; PNG 2480 × 3508 at 300 dpi; margins ±0.1 mm in PDF and PNG; fonts embedded; vector text; frozen page matches live < 0.5 %; charts ≥ 300 dpi |
+| **M2** | Side-by-side preview: web pane (live/frozen, capture state), read-only A4 print pane, linked selection, Proof view, calibrated 100 % zoom | Linked highlights hit the right element (30+ per fixture, boxes ±1 px); captured state is in the frozen DOM; editor vs Proof < 1 % diff; 100 % zoom = 793.7 × 1122.5 px; ruler 3.7795 px/mm ±0.5 %; no console errors; axe smoke check |
+| **M3** | Decomposition: scoring, granularity slider, library, split/merge/promote/demote, select similar, saved rules, print presets, CSS extraction | Boundary precision and recall ≥ 0.9 against labelled trees at 3 granularities; isolated component vs source region < 1 % diff (fallback must also pass); repeated cards grouped; presets verified in the frozen DOM; rules repeat exactly; every component named, no duplicate names per page |
+| **M4** | Arrange editing, multi-page, landscape, drag from web to print, margin inspector and drag lines, snapping and grid, capture width, point-size readout | Scripted drags land ±0.1 mm; snapping ±0.1 mm; margins never move placements; margin validation; export geometry = editor placements ±0.1 mm on random layouts with fixed seeds; point-size readout correct; undo restores exactly |
+| **M5** | Content and style editing, overrides with revert, named snapshots, "differs from web" markers | One override and one undo step per edit; text edits never change structure; revert gives 0 px difference; web source never changed; overrides survive reload; Unicode round trip (accents, CJK, RTL, emoji) through the PDF; markers on every edited element |
+| **M6** | Fit and flow: scale/reflow/crop, overflow flag, auto-paginate, linked frames (last, can be cut) | Mode behaviour by line counts and boxes; overflow flag exact; pagination rules on the article plus 20 generated documents; extracted PDF text = source text (nothing lost or duplicated), including across linked frames |
+| **M7** | Source sync: re-import, 3-step matching, Changes panel, optional code pane | Unchanged source: 100 % matched and overrides kept; scripted change suite ≥ 95 % correctly sorted; no override dropped silently; removed source leaves an orphan; one-step undo |
+| **M8** | Print production: bleed and crop marks, CMYK PDF/X with RGB fallback, TIFF/JPEG, preflight, soft proof | TrimBox 210 × 297 mm and marks ±0.1 mm; veraPDF valid; CMYK keeps text and vector paths; ΔE2000 ≤ 3 in gamut, out-of-gamut flagged; each preflight rule fires on its trigger fixture and stays quiet on a clean one |
+| **M9** | A4 templates, auto-pack, master pages, data merge, patch export | Templates inside the content area for 50 random margin sets; tri-fold panels 99 mm and folds at 99/198 mm; step-and-repeat cards and marks ±0.1 mm; auto-pack repeatable, no overlaps; 50 CSV rows → 50 pages with every value found; exported patch applied and matches < 1 % |
+| **M10** | Hardening, docs with runnable examples, `npm run acceptance` | 20 pages / 200 components: drag < 16 ms per frame, export < 60 s; crash recovery loses ≤ 5 s; every doc command runs in CI; full suite green in the pinned CI image |
+
+### Final acceptance
+
+`npm run acceptance` builds the review pack described in [`ACCEPTANCE.md`](ACCEPTANCE.md).
+It covers the only things automation can't prove: how the user's printer places the
+page, how colours look on paper, and whether the output is good enough to send to print.
+Anything that fails the review becomes a new automated test before it's fixed.
 
 ## Checklist shown in the export dialog on every print job
 

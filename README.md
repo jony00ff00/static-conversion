@@ -1,4 +1,4 @@
-# visualeditor
+# static-converter
 
 A deterministic web-to-print editor. It takes HTML/CSS/JS, splits it into components,
 and lays them out on **A4** pages with user-set margins. A live web preview sits next to
@@ -6,7 +6,8 @@ an editable print preview, and the result exports at print quality. No LLM is us
 
 - Full plan and milestones: [`docs/PLAN.md`](docs/PLAN.md)
 - Render sandbox: [`docs/SANDBOX.md`](docs/SANDBOX.md)
-- Milestone sign-offs: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md)
+- Milestone checks: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md)
+- Final review (the only manual check): [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)
 - Sample outputs: [`docs/samples/`](docs/samples/)
 
 ## Status: M1 — render core and single-page A4 export
