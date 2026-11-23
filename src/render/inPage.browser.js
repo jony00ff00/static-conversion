@@ -621,7 +621,7 @@
 
   /* -------------------------------------------------------------- decompose */
 
-  var SEMANTIC = { HEADER: 'header', NAV: 'nav', FOOTER: 'footer', SECTION: 'section', ARTICLE: 'card', ASIDE: 'section', FIGURE: 'media', TABLE: 'table', FORM: 'section', BLOCKQUOTE: 'text', MAIN: 'section' };
+  var SEMANTIC = { HEADER: 'header', NAV: 'nav', FOOTER: 'footer', SECTION: 'section', ARTICLE: 'card', ASIDE: 'section', FIGURE: 'media', TABLE: 'table', FORM: 'section', BLOCKQUOTE: 'text', MAIN: 'section', DETAILS: 'group' };
   var MEDIA = { IMG: 1, SVG: 1, VIDEO: 1, PICTURE: 1, CANVAS: 1, IFRAME: 1 };
   var TEXT = { H1: 'text', H2: 'text', H3: 'text', H4: 'text', H5: 'text', H6: 'text', P: 'text', PRE: 'text', UL: 'list', OL: 'list', DL: 'list' };
   var INLINE = { SPAN: 1, A: 1, STRONG: 1, EM: 1, B: 1, I: 1, LABEL: 1, SMALL: 1, CODE: 1, BR: 1, SUP: 1, SUB: 1, U: 1, S: 1, ABBR: 1, TIME: 1, MARK: 1 };
@@ -698,6 +698,7 @@
   function nameOf(el, kind) {
     var t = headingText(el);
     if (!t) t = el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') || '';
+    if (!t && el.getAttribute('data-ve-frozen') === 'canvas') t = 'Chart';
     if (!t) {
       // Join the text of leaf elements with spaces, so "Work About Contact"
       // doesn't run together when the links have no whitespace between them.
@@ -737,11 +738,16 @@
         var box = visibleBox(c);
         if (!box) { if (getComputedStyle(c).display === 'contents') walk(c, insideMedia); return; }
         var isMedia = !!MEDIA[tag] || c.getAttribute('data-ve-frozen') === 'canvas' || c.getAttribute('data-ve-frozen') === 'video';
-        var s = 0, kind = null;
+        var s = 0, kind = null, hinted = false;
         if (!insideMedia) {
           var cs = getComputedStyle(c);
           if (SEMANTIC[tag]) { s += tag === 'MAIN' ? 1 : 3; kind = SEMANTIC[tag]; }
           if (c.hasAttribute('data-component') || tag.indexOf('-') > 0) s += 3;
+          // Author hints: common component names in class/id, and landmark/widget roles.
+          var hint = ((typeof c.className === 'string' ? c.className : '') + ' ' + (c.id || '')).toLowerCase();
+          if (/(^|[\s_-])(tabs|accordion|carousel|slider|hero|card|panel|alert|gallery|pricing|testimonial|faq|banner|callout)([\s_-]|$)/.test(hint) && box.w * box.h >= pageArea * 0.005) { s += 3; hinted = true; kind = kind || (/card|panel|pricing|testimonial/.test(hint) ? 'card' : 'group'); }
+          var role = c.getAttribute('role');
+          if (role === 'tablist' || role === 'region' || role === 'tabpanel' || c.getAttribute('aria-roledescription') === 'carousel') { s += 2; hinted = true; }
           var parentBg = c.parentElement ? effectiveBg(c.parentElement) : 'rgb(255, 255, 255)';
           var ownBg = cs.backgroundColor;
           var boxed = (opaque(ownBg) && ownBg !== parentBg) || cs.backgroundImage !== 'none' ||
@@ -750,17 +756,18 @@
           if (boxed) s += 2;
           if (isMedia) { s += 3; kind = 'media'; }
           if (TEXT[tag]) { s += 2; kind = kind || TEXT[tag]; }
-          else if (!kind && !isMedia && ownTextLen(c) >= 20 && !hasBlockKids(c)) { s += 2; kind = 'text'; }
+          else if (!kind && !isMedia && ownTextLen(c) >= 3 && !hasBlockKids(c)) { s += 2; kind = 'text'; }
           if ((cs.display === 'grid' || cs.display === 'flex') && c.children.length >= 2) s += 1;
-          if (box.w >= docW * 0.9 && box.h >= 150) s += 1;
+          if (box.w >= docW * 0.9 && box.h >= 150 && tag !== 'MAIN') s += 1;
           if (INLINE[tag] && !isMedia) s = 0;
-          if (!isMedia && !TEXT[tag] && box.w * box.h < pageArea * 0.005) s -= 2;
+          if (!isMedia && kind !== 'text' && kind !== 'list' && box.w * box.h < pageArea * 0.005) s -= 2;
           if (isMedia && (box.w < 24 || box.h < 24)) s = 0;
           if (forced.has(c)) s = Math.max(s, 5);
           if (ignored.has(c)) s = -99;
-          info.set(c, { el: c, s: s, kind: kind, box: box, boxed: boxed, media: isMedia });
+          info.set(c, { el: c, s: s, kind: kind, box: box, boxed: boxed, media: isMedia, hinted: hinted });
         }
-        if (!isMedia) walk(c, insideMedia);
+        // Tables are one unit: their rows and cells are never components.
+        if (!isMedia && tag !== 'TABLE') walk(c, insideMedia);
       });
     };
     walk(body, false);
@@ -802,7 +809,7 @@
     // Pure wrappers (no box of their own, mostly filled by 2+ candidate
     // children) are not components themselves: their children are.
     cand.forEach(function (v) {
-      if (forced.has(v.el) || v.boxed || v.media || !/^(DIV|MAIN|SECTION)$/.test(v.el.tagName)) return;
+      if (forced.has(v.el) || v.boxed || v.media || v.hinted || !/^(DIV|MAIN|SECTION)$/.test(v.el.tagName)) return;
       var kids = [];
       cand.forEach(function (k) {
         if (k === v) return;

@@ -105,12 +105,16 @@ export function isolateComponent(parse: ParseHtml, frozenHtml: string, def: Comp
       }
     }
     root.setAttribute('data-ve-root', '');
+    // Inline media (img, svg…) would follow the ancestors' text-align inside a
+    // wider frame; as a block it sits at the frame's top-left like it did on the page.
+    if (/^(IMG|SVG|VIDEO|CANVAS|PICTURE|IFRAME|OBJECT|EMBED)$/i.test(root.tagName)) css.push('[data-ve-root]{display:block!important}');
     css.push(
       '[data-ve-anc]{margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;' +
         'position:static!important;transform:none!important;min-height:0!important;height:auto!important;max-height:none!important;' +
         'width:auto!important;max-width:none!important;min-width:0!important;overflow:visible!important;display:block!important;' +
         'float:none!important;filter:none!important;opacity:1!important;columns:auto!important;gap:0!important}',
-      `html{background:${def.bg}!important}`,
+      // More specific than [data-ve-anc] (which clears ancestor backgrounds).
+      `html[data-ve-anc]{background:${def.bg}!important}`,
       `[data-ve-root]{margin:0!important;width:${width}px!important;box-sizing:border-box!important;position:relative!important;` +
         'left:0!important;top:0!important;right:auto!important;bottom:auto!important;transform:none!important;float:none!important;' +
         `flex:none!important;max-width:none!important;min-width:0!important${opts.heightPx ? `;height:${opts.heightPx}px!important` : ''}}`,

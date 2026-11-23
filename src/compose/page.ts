@@ -46,8 +46,12 @@ export function frameGeometry(p: Placement, def: ComponentDef, slice?: FlowSlice
   return { w, h, layoutWidth: def.widthPx, scale: 1, offsetX: cx, offsetY: cy, innerHeight: Math.max(def.heightPx, h + cy) };
 }
 
-function frameHtml(p: Placement, def: ComponentDef, htmlFor: HtmlFor, slice?: FlowSlice): string {
+function frameHtml(p: Placement, def: ComponentDef, htmlFor: HtmlFor, captureWidthPx: number, slice?: FlowSlice): string {
   const g = frameGeometry(p, def, slice);
+  // Viewport units (vw) in the page's CSS must resolve against the capture
+  // width, so a component's frame is never narrower than the captured page.
+  // The frame's clip shows only the component's own width.
+  const iframeWidth = def.kind === 'page' ? g.layoutWidth : Math.max(g.layoutWidth, captureWidthPx);
   const x = mmToPx(p.xMm);
   const y = mmToPx(p.yMm);
   const transform =
@@ -57,7 +61,7 @@ function frameHtml(p: Placement, def: ComponentDef, htmlFor: HtmlFor, slice?: Fl
   const html = htmlFor(def, g.layoutWidth);
   const inner = (offsetY: number, height: number, top: number, clipH?: number) =>
     `<iframe class="ve-inner" sandbox="allow-same-origin" scrolling="no" tabindex="-1" srcdoc="${escAttr(html)}" style="` +
-    `width:${r4(g.layoutWidth)}px;height:${r4(height)}px;transform:translate(${r4(-g.offsetX * g.scale)}px, ${r4(top - offsetY * g.scale)}px) scale(${r4(g.scale)});` +
+    `width:${r4(iframeWidth)}px;height:${r4(height)}px;transform:translate(${r4(-g.offsetX * g.scale)}px, ${r4(top - offsetY * g.scale)}px) scale(${r4(g.scale)});` +
     `${clipH !== undefined ? `clip-path:polygon(0 ${r4(offsetY)}px, 100% ${r4(offsetY)}px, 100% ${r4(offsetY + clipH)}px, 0 ${r4(offsetY + clipH)}px);` : ''}"></iframe>`;
   let content: string;
   if (slice?.header) {
@@ -97,7 +101,7 @@ function pageBody(doc: EditorDocument, pageId: string, htmlFor: HtmlFor): string
     .sort((a, b) => a.z - b.z)
     .map((p) => {
       const def = doc.components[p.componentId];
-      return def ? frameHtml(p, def, htmlFor, sliceFor(doc, p)) : '';
+      return def ? frameHtml(p, def, htmlFor, doc.captureWidthPx, sliceFor(doc, p)) : '';
     })
     .join('');
   return `<div class="ve-page" data-page="${escAttr(pageId)}">${frames}</div>`;
