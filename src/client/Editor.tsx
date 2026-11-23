@@ -99,7 +99,13 @@ export function Editor({ projectId }: { projectId: string }) {
   const [webMode, setWebMode] = useState<'frozen' | 'live'>('frozen');
   const [pendingSteps, setPendingSteps] = useState<Array<{ action: 'click'; selector: string }>>([]);
   const [zoom, setZoom] = useState(0.75);
-  const [drag, setDrag] = useState<Drag | null>(null);
+  const [drag, setDragState] = useState<Drag | null>(null);
+  const dragRef = useRef<Drag | null>(null);
+  const setDrag = useCallback((v: Drag | null | ((d: Drag | null) => Drag | null)) => {
+    const next = typeof v === 'function' ? v(dragRef.current) : v;
+    dragRef.current = next;
+    setDragState(next);
+  }, []);
   const [contentEdit, setContentEdit] = useState<string | null>(null);
   const [contentTarget, setContentTarget] = useState<string | null>(null);
   const [proof, setProof] = useState<Record<string, { url: string; opacity: number; diff: boolean }>>({});
@@ -281,9 +287,11 @@ export function Editor({ projectId }: { projectId: string }) {
     // The frozen page is a picture of the site: links and forms must not navigate it.
     d.addEventListener('click', (e) => e.preventDefault(), true);
     d.addEventListener('submit', (e) => e.preventDefault(), true);
+    d.addEventListener('dragstart', (e) => e.preventDefault(), true);
     d.addEventListener('pointerdown', (e) => {
       const el = (e.target as Element).closest?.('[data-wp-id]');
       if (!el || el.tagName === 'HTML' || el.tagName === 'BODY') return;
+      e.preventDefault(); // no text selection or native drag in the frozen page
       const wp = el.getAttribute('data-wp-id');
       selectWp(wp, false);
       startWebDrag(e as PointerEvent, wp!);
@@ -354,18 +362,22 @@ export function Editor({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (drag?.kind !== 'place') return;
     const move = (e: PointerEvent) => setDrag((d) => (d?.kind === 'place' ? { ...d, x: e.clientX, y: e.clientY } : d));
-    const up = (e: PointerEvent) => {
-      const d = drag;
+    // Drop at a point in this window's coordinates (also used when the release
+    // is delivered to the web pane, which keeps the mouse while the button is down).
+    const dropAt = (cx: number, cy: number) => {
+      const d = dragRef.current;
+      if (d?.kind !== 'place') return;
       setDrag(null);
-      const target = document.elementsFromPoint(e.clientX, e.clientY).find((el) => (el as HTMLElement).dataset?.pageDrop);
+      const target = document.elementsFromPoint(cx, cy).find((el) => (el as HTMLElement).dataset?.pageDrop);
       if (!target || !doc) return;
       const pageId = (target as HTMLElement).dataset.pageDrop!;
       const r = target.getBoundingClientRect();
       const s = PX_PER_MM * zoom;
-      const xMm = r2((e.clientX - r.left) / s);
-      const yMm = r2((e.clientY - r.top) / s);
+      const xMm = r2((cx - r.left) / s);
+      const yMm = r2((cy - r.top) / s);
       commit((x) => ops.placeComponent(x, d.def, pageId, { xMm, yMm }));
     };
+    const up = (e: PointerEvent) => dropAt(e.clientX, e.clientY);
     addEventListener('pointermove', move);
     addEventListener('pointerup', up);
     // Also listen inside the web frame (pointer captured there while dragging out).
@@ -373,7 +385,7 @@ export function Editor({ projectId }: { projectId: string }) {
     const fr = webFrame.current?.getBoundingClientRect();
     const sx = fr && webFrame.current ? fr.width / webFrame.current.offsetWidth : 1;
     const wmove = (e: PointerEvent) => fr && setDrag((d) => (d?.kind === 'place' ? { ...d, x: fr.left + e.clientX * sx, y: fr.top + e.clientY * sx } : d));
-    const wup = () => setDrag(null);
+    const wup = (e: PointerEvent) => (fr ? dropAt(fr.left + e.clientX * sx, fr.top + e.clientY * sx) : setDrag(null));
     wd?.addEventListener('pointermove', wmove);
     wd?.addEventListener('pointerup', wup);
     return () => {
@@ -459,8 +471,11 @@ export function Editor({ projectId }: { projectId: string }) {
   };
 
   const onOverlayUp = () => {
-    if (!drag || !doc) return;
-    const d = drag;
+    // Read the live drag from the ref: several handlers may see the same
+    // pointerup, and only the first may commit it.
+    const d = dragRef.current;
+    if (!d || !doc) return;
+    dragRef.current = null;
     setDrag(null);
     if (d.kind === 'move' && (Math.abs(d.dx) > 0.001 || Math.abs(d.dy) > 0.001)) commit((x) => ops.movePlacements(x, d.ids, r2(d.dx), r2(d.dy)));
     if (d.kind === 'resize') commit((x) => ops.setPlacementRect(x, d.id, { x: r2(d.rect.x), y: r2(d.rect.y), w: r2(d.rect.w), h: r2(d.rect.h) }));
