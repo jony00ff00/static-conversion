@@ -553,6 +553,8 @@ export function Editor({ projectId }: { projectId: string }) {
   useEffect(() => wireContentMode(), [wireContentMode]);
 
   const contentPlacement = doc?.placements.find((p) => p.id === contentEdit);
+  // While editing content, that page takes clicks directly (overlay steps aside).
+  const contentPage = contentPlacement?.pageId ?? null;
   const targetEl = useMemo(() => {
     if (!contentTarget) return null;
     return parse(frozen).querySelector(`[data-wp-id="${contentTarget}"]`);
@@ -947,12 +949,13 @@ export function Editor({ projectId }: { projectId: string }) {
                     sandbox="allow-same-origin"
                     srcDoc={pageSrc[pg.id]}
                     onLoad={() => onPageLoad(pg.id)}
-                    style={{ width: Math.ceil(mmToPx(t.width)), height: Math.ceil(mmToPx(t.height)), transform: zoom === 1 ? undefined : `scale(${zoom})` }}
+                    style={{ width: Math.ceil(mmToPx(t.width)), height: Math.ceil(mmToPx(t.height)), transform: zoom === 1 ? undefined : `scale(${zoom})`, pointerEvents: contentPage === pg.id ? 'auto' : 'none' }}
                   />
                   {pf && <img className="proof" src={pf.url} alt={`Server proof of page ${pi + 1}`} style={{ width: t.width * s, height: t.height * s, opacity: pf.opacity, mixBlendMode: pf.diff ? 'difference' : 'normal' }} />}
                   <div
                     className="overlay"
                     data-page-drop={pg.id}
+                    style={{ pointerEvents: contentPage === pg.id ? 'none' : undefined }}
                     onPointerDown={(e) => {
                       if (e.target === e.currentTarget) {
                         setSelection([]);
@@ -1119,7 +1122,8 @@ export function Editor({ projectId }: { projectId: string }) {
         {contentPlacement && (
           <div className="content-tools">
             <h2>Editing content</h2>
-            <p className="muted">Click text to edit it. Press Esc to finish.</p>
+            <p className="muted">Click text to edit it. Press Esc or Done to finish.</p>
+            <button className="primary" onClick={() => { (document.activeElement as HTMLElement | null)?.blur?.(); pageFrames.current[contentPlacement.pageId]?.contentDocument?.querySelectorAll('iframe.ve-inner').forEach((f) => ((f as HTMLIFrameElement).contentDocument?.activeElement as HTMLElement | null)?.blur?.()); setTimeout(() => { setContentEdit(null); setContentTarget(null); }, 0); }}>Done editing</button>
             {contentTarget && targetEl && (
               <>
                 <p>
