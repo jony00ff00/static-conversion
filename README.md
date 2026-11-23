@@ -1,4 +1,4 @@
-# static-converter
+# static-conversion
 
 A deterministic web-to-print editor. It takes HTML/CSS/JS, splits it into components,
 and lays them out on **A4** pages with user-set margins. A live web preview sits next to
