@@ -48,10 +48,14 @@ Run the editor:
 npm run dev    # then open http://localhost:5173
 ```
 
-Import a test page, pasted code, a zip or a URL. The web page appears on the left and
-the A4 pages on the right. Drag components from the library or the web page onto a
-page, double-click a frame to edit its text, and use **Flow onto pages** for long
-content. **Export PDF** downloads the result.
+Import a test page, pasted code, an .html file (optionally with its CSS, JavaScript and
+images selected alongside it), a zip or a URL. The web page appears on the left and the
+A4 pages on the right. Drag components from the library or the web page onto a page,
+double-click a frame to edit its text, and use **Flow onto pages** for long content.
+Select grouped items to get one set of handles for the group: **Resize** scales every
+item, **Crop** trims them without moving their content. Content that runs off the page or
+out of its frame is shown dimmed around the page (**Overflow** in the toolbar; it is never
+exported). **Export PDF** downloads the result.
 
 Export a page from the command line:
 

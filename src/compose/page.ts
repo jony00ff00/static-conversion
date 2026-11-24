@@ -43,11 +43,20 @@ export function frameGeometry(p: Placement, def: ComponentDef, slice?: FlowSlice
   }
   const cx = p.cropXPx ?? 0;
   const cy = p.cropYPx ?? 0;
-  return { w, h, layoutWidth: def.widthPx, scale: 1, offsetX: cx, offsetY: cy, innerHeight: Math.max(def.heightPx, h + cy) };
+  const sc = p.cropScale ?? 1;
+  return { w, h, layoutWidth: p.cropLayoutPx ?? def.widthPx, scale: sc, offsetX: cx, offsetY: cy, innerHeight: Math.max(def.heightPx, h / sc + cy) };
 }
 
-function frameHtml(p: Placement, def: ComponentDef, htmlFor: HtmlFor, captureWidthPx: number, slice?: FlowSlice): string {
-  const g = frameGeometry(p, def, slice);
+interface FrameOverride {
+  /** Inner iframe height (layout px): the full content, for the overflow view. */
+  innerHeight?: number;
+  /** Outer box size (CSS px) and clip-path, replacing the frame's own clip. */
+  box?: { w: number; h: number; clip: string };
+}
+
+function frameHtml(p: Placement, def: ComponentDef, htmlFor: HtmlFor, captureWidthPx: number, slice?: FlowSlice, o: FrameOverride = {}): string {
+  const g0 = frameGeometry(p, def, slice);
+  const g = o.innerHeight !== undefined ? { ...g0, innerHeight: Math.max(g0.innerHeight, o.innerHeight) } : g0;
   // Viewport units (vw) in the page's CSS must resolve against the capture
   // width, so a component's frame is never narrower than the captured page.
   // The frame's clip shows only the component's own width.
@@ -76,8 +85,8 @@ function frameHtml(p: Placement, def: ComponentDef, htmlFor: HtmlFor, captureWid
   }
   return (
     `<div class="ve-frame" data-placement="${escAttr(p.id)}" data-component="${escAttr(def.id)}" style="` +
-    `width:${Math.ceil(g.w)}px;height:${Math.ceil(g.h)}px;transform:${transform};z-index:${p.z};` +
-    `clip-path:polygon(0 0, ${r4(g.w)}px 0, ${r4(g.w)}px ${r4(g.h)}px, 0 ${r4(g.h)}px)">${content}</div>`
+    `width:${Math.ceil(o.box?.w ?? g.w)}px;height:${Math.ceil(o.box?.h ?? g.h)}px;transform:${transform};z-index:${p.z};` +
+    `clip-path:${o.box?.clip ?? `polygon(0 0, ${r4(g.w)}px 0, ${r4(g.w)}px ${r4(g.h)}px, 0 ${r4(g.h)}px)`}">${content}</div>`
   );
 }
 
@@ -119,6 +128,109 @@ export function composeDocumentHtml(doc: EditorDocument, htmlFor: HtmlFor): stri
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${PAGE_CSS(t.width, t.height)}</style></head><body>${doc.pages
     .map((p) => pageBody(doc, p.id, htmlFor))
     .join('')}</body></html>`;
+}
+
+/* ------------------------------------------------------------ overflow view */
+
+/** Space around the page (CSS px) the overflow view needs, capped per side. */
+export interface Pad {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+}
+
+export const OVERFLOW_MAX_PAD_MM = 120;
+
+interface OverflowFrame {
+  p: Placement;
+  def: ComponentDef;
+  /** Everything the frame would draw if nothing clipped it (page px). */
+  content: { x: number; y: number; w: number; h: number };
+  /** Part already drawn on the page (frame ∩ page), in frame-local px. */
+  hole: { x1: number; y1: number; x2: number; y2: number } | null;
+  innerHeight?: number;
+}
+
+/**
+ * Frames that draw outside what the page shows: frames that run off the page,
+ * and reflow/scale frames whose content is taller than the frame.
+ * `contentHeightPx` is the measured content height of reflow frames.
+ */
+function overflowFrames(doc: EditorDocument, pageId: string, contentHeightPx: Record<string, number>): OverflowFrame[] {
+  const t = trimMm(doc.pageSetup);
+  const W = mmToPx(t.width);
+  const H = mmToPx(t.height);
+  const out: OverflowFrame[] = [];
+  for (const p of doc.placements.filter((x) => x.pageId === pageId)) {
+    const def = doc.components[p.componentId];
+    if (!def) continue;
+    const g = frameGeometry(p, def, sliceFor(doc, p));
+    const x = mmToPx(p.xMm);
+    const y = mmToPx(p.yMm);
+    let contentH = g.h;
+    let innerHeight: number | undefined;
+    if (!p.chainId && p.fit === 'reflow' && contentHeightPx[p.id] !== undefined) {
+      contentH = Math.max(g.h, contentHeightPx[p.id]!);
+      innerHeight = contentH;
+    } else if (!p.chainId && p.fit === 'scale') {
+      contentH = Math.max(g.h, def.heightPx * g.scale);
+    }
+    const tallerThanFrame = contentH > g.h + 0.5;
+    const offPage = !p.rotationDeg && (x < -0.5 || y < -0.5 || x + g.w > W + 0.5 || y + g.h > H + 0.5);
+    if (!tallerThanFrame && !offPage) continue;
+    let hole: OverflowFrame['hole'] = { x1: 0, y1: 0, x2: g.w, y2: g.h };
+    if (!p.rotationDeg) {
+      hole = { x1: Math.max(0, -x), y1: Math.max(0, -y), x2: Math.min(g.w, W - x), y2: Math.min(g.h, H - y) };
+      if (hole.x2 <= hole.x1 || hole.y2 <= hole.y1) hole = null;
+    }
+    out.push({ p, def, content: { x, y, w: g.w, h: contentH }, hole, innerHeight });
+  }
+  return out;
+}
+
+/**
+ * A see-through layer for the editor (never exported): what frames draw
+ * outside the page and outside their own frame, positioned `pad` px in from
+ * its top-left corner so it can extend beyond the page.
+ */
+export function composeOverflowHtml(
+  doc: EditorDocument,
+  pageId: string,
+  htmlFor: HtmlFor,
+  contentHeightPx: Record<string, number> = {},
+): { html: string; pad: Pad } | null {
+  const frames = overflowFrames(doc, pageId, contentHeightPx);
+  if (!frames.length) return null;
+  const t = trimMm(doc.pageSetup);
+  const W = mmToPx(t.width);
+  const H = mmToPx(t.height);
+  const max = mmToPx(OVERFLOW_MAX_PAD_MM);
+  const pad: Pad = {
+    l: Math.min(max, Math.max(0, ...frames.map((f) => -f.content.x))),
+    t: Math.min(max, Math.max(0, ...frames.map((f) => -f.content.y))),
+    r: Math.min(max, Math.max(0, ...frames.map((f) => f.content.x + f.content.w - W))),
+    b: Math.min(max, Math.max(0, ...frames.map((f) => f.content.y + f.content.h - H))),
+  };
+  const body = frames
+    .sort((a, b) => a.p.z - b.p.z)
+    .map((f) => {
+      const { w, h } = f.content;
+      const outer = `0 0, ${r4(w)}px 0, ${r4(w)}px ${r4(h)}px, 0 ${r4(h)}px, 0 0`;
+      const k = f.hole;
+      const clip = k
+        ? `polygon(evenodd, ${outer}, ${r4(k.x1)}px ${r4(k.y1)}px, ${r4(k.x1)}px ${r4(k.y2)}px, ${r4(k.x2)}px ${r4(k.y2)}px, ${r4(k.x2)}px ${r4(k.y1)}px, ${r4(k.x1)}px ${r4(k.y1)}px)`
+        : `polygon(${outer})`;
+      return frameHtml(f.p, f.def, htmlFor, doc.captureWidthPx, sliceFor(doc, f.p), { innerHeight: f.innerHeight, box: { w, h, clip } });
+    })
+    .join('');
+  const css = `${PAGE_CSS(t.width, t.height)}
+html, body { background: transparent; overflow: hidden; }
+.ve-overflow { position: absolute; left: 0; top: 0; transform: translate(${r4(pad.l)}px, ${r4(pad.t)}px); }`;
+  return {
+    html: `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div class="ve-overflow">${body}</div></body></html>`,
+    pad,
+  };
 }
 
 export { contentRectMm };

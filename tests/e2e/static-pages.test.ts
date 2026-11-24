@@ -142,6 +142,24 @@ describe('Static build (GitHub Pages)', () => {
     await page.close();
   }, 120_000);
 
+  it('imports an uploaded .html file and shows overflow beyond the page', async () => {
+    const { page, errors } = await open();
+    await page.setInputFiles('input[aria-label="HTML or zip file"]', [
+      { name: 'flyer.html', mimeType: 'text/html', buffer: Buffer.from('<!DOCTYPE html><html><head><link rel="stylesheet" href="styles/flyer.css"></head><body><h1>Spring fair</h1><p>Saturday</p></body></html>') },
+      { name: 'flyer.css', mimeType: 'text/css', buffer: Buffer.from('h1 { color: rgb(0, 120, 0); }') },
+    ]);
+    await waitForEditor(page);
+    const web = await frozenFrame(page);
+    expect(await web.$eval('h1', (e) => getComputedStyle(e).color)).toBe('rgb(0, 120, 0)');
+    await page.evaluate(() => {
+      const ve = (window as unknown as { __ve: { commit(op: (d: unknown) => unknown): void; ops: Record<string, (...a: unknown[]) => unknown> } }).__ve;
+      ve.commit((d) => ve.ops.setPlacementRect!(d, 'pl-page', { x: 150, y: 20, w: 180, h: 60 }));
+    });
+    await page.waitForSelector('[data-testid="overflow-frame-1"]');
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
+
   it('turns off importing from a web address, with an explanation', async () => {
     const { page } = await open();
     expect(await page.isDisabled('button:has-text("Import from URL")')).toBe(true);

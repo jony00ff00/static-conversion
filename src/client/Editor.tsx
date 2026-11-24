@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { api, type ProjectPayload } from './api.js';
-import { clientBaseUrl, frozenForPane, liveUrl, pageHtml, parse } from './render.js';
+import { clientBaseUrl, frozenForPane, liveUrl, makeHtmlFor, pageHtml, parse } from './render.js';
+import { composeOverflowHtml, type Pad } from '../compose/page.js';
 import { homeHref } from './nav.js';
 import { IS_STATIC } from '../static/env.js';
 import { buildTree, commonAncestor, defFromItem, flattenTree, type TreeItem } from '../compose/tree.js';
@@ -14,6 +15,8 @@ type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 type Drag =
   | { kind: 'move'; ids: string[]; startX: number; startY: number; dx: number; dy: number }
   | { kind: 'resize'; id: string; handle: Handle; startX: number; startY: number; rect: Rect }
+  /** Resize or crop a group as one: `rects` previews every member. */
+  | { kind: 'gresize'; ids: string[]; handle: Handle; startX: number; startY: number; from: Rect; rect: Rect; mode: ops.GroupResizeMode; rects: Record<string, Rect> }
   | { kind: 'margin'; side: 'top' | 'right' | 'bottom' | 'left'; startX: number; startY: number; value: number; orig: number }
   | { kind: 'guide'; id: string; axis: 'x' | 'y'; start: number; pos: number }
   | { kind: 'place'; def: ComponentDef; label: string; x: number; y: number };
@@ -85,7 +88,7 @@ function innerDocs(pageFrame: HTMLIFrameElement | null, placementId?: string): D
 
 function minFontPt(def: ComponentDef, p: Placement): number | null {
   if (def.minFontPx == null) return null;
-  const scale = p.fit === 'scale' ? mmToPx(p.wMm) / def.widthPx : 1;
+  const scale = p.fit === 'scale' ? mmToPx(p.wMm) / def.widthPx : p.fit === 'crop' ? p.cropScale ?? 1 : 1;
   return Math.round(pxToPt(def.minFontPx * scale) * 10) / 10;
 }
 
@@ -112,6 +115,10 @@ export function Editor({ projectId }: { projectId: string }) {
   const [contentTarget, setContentTarget] = useState<string | null>(null);
   const [proof, setProof] = useState<Record<string, { url: string; opacity: number; diff: boolean }>>({});
   const [overflow, setOverflow] = useState<Record<string, boolean>>({});
+  /** Measured content height (CSS px) of reflow frames, for the overflow view. */
+  const [contentH, setContentH] = useState<Record<string, number>>({});
+  const [showOverflow, setShowOverflow] = useState(true);
+  const [groupMode, setGroupMode] = useState<ops.GroupResizeMode>('scale');
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [hl, setHl] = useState<{ web: Rect | null; print: Rect[] }>({ web: null, print: [] });
@@ -222,6 +229,14 @@ export function Editor({ projectId }: { projectId: string }) {
     for (const pg of doc.pages) out[pg.id] = pageHtml(projectId, frozen, baseUrl, doc, pg.id);
     return out;
   }, [project, doc, frozen, baseUrl, projectId]);
+  // Dimmed view of content that runs off the page or out of its frame (editor only).
+  const overflowSrc = useMemo(() => {
+    if (!project || !doc || !frozen || !showOverflow) return {} as Record<string, { html: string; pad: Pad } | null>;
+    const htmlFor = makeHtmlFor(projectId, frozen, baseUrl, doc);
+    const out: Record<string, { html: string; pad: Pad } | null> = {};
+    for (const pg of doc.pages) out[pg.id] = composeOverflowHtml(doc, pg.id, htmlFor, contentH);
+    return out;
+  }, [project, doc, frozen, baseUrl, projectId, contentH, showOverflow]);
   const webSrc = useMemo(() => (frozen && baseUrl ? frozenForPane(frozen, baseUrl) : ''), [frozen, baseUrl]);
   const inMargin = useMemo(() => new Set(doc ? ops.placementsInMargin(doc) : []), [doc]);
 
@@ -421,6 +436,22 @@ export function Editor({ projectId }: { projectId: string }) {
     setDrag({ kind: 'resize', id: p.id, handle, startX: e.clientX, startY: e.clientY, rect: { x: p.xMm, y: p.yMm, w: p.wMm, h: p.hMm } });
   };
 
+  /** The selected group, when the selection is exactly one group on one page. */
+  const selectedGroup = (): Placement[] => {
+    if (!doc || !selection.length) return [];
+    const ids = ops.withGroup(doc, selection);
+    const ms = doc.placements.filter((p) => ids.includes(p.id));
+    const g = ms[0]?.groupId;
+    return ms.length > 1 && g && ms.every((p) => p.groupId === g && p.pageId === ms[0]!.pageId) ? ms : [];
+  };
+
+  const onGroupHandleDown = (e: RPointerEvent, members: Placement[], handle: Handle) => {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const from = ops.boundsOf(members);
+    setDrag({ kind: 'gresize', ids: members.map((p) => p.id), handle, startX: e.clientX, startY: e.clientY, from, rect: from, mode: groupMode, rects: {} });
+  };
+
   const targetsFor = (pageId: string, exclude: string[]) =>
     doc
       ? snapTargets(doc.pageSetup, {
@@ -433,6 +464,7 @@ export function Editor({ projectId }: { projectId: string }) {
   const draftRect = (p: Placement): Rect => {
     if (drag?.kind === 'move' && drag.ids.includes(p.id)) return { x: p.xMm + drag.dx, y: p.yMm + drag.dy, w: p.wMm, h: p.hMm };
     if (drag?.kind === 'resize' && drag.id === p.id) return drag.rect;
+    if (drag?.kind === 'gresize' && drag.rects[p.id]) return drag.rects[p.id]!;
     return { x: p.xMm, y: p.yMm, w: p.wMm, h: p.hMm };
   };
 
@@ -462,6 +494,36 @@ export function Editor({ projectId }: { projectId: string }) {
         ? { x, y, w: Math.max(1, w), h: Math.max(1, h) }
         : snapResize({ x, y, w, h }, { left: hd.includes('w'), right: hd.includes('e'), top: hd.includes('n'), bottom: hd.includes('s') }, targetsFor(pageId, [p.id]), SNAP_PX / s);
       setDrag({ ...drag, rect: r });
+    } else if (drag.kind === 'gresize') {
+      const f = drag.from;
+      const dx = (e.clientX - drag.startX) / s;
+      const dy = (e.clientY - drag.startY) / s;
+      const hd = drag.handle;
+      let { x, y, w, h } = f;
+      if (hd.includes('w')) (x += dx), (w -= dx);
+      if (hd.includes('e')) w += dx;
+      if (hd.includes('n')) (y += dy), (h -= dy);
+      if (hd.includes('s')) h += dy;
+      let r: Rect;
+      if (e.shiftKey && hd.length === 2) {
+        // Shift on a corner keeps the group's proportions.
+        const k = Math.max(w / f.w, h / f.h);
+        r = { x: hd.includes('w') ? f.x + f.w - f.w * k : x, y: hd.includes('n') ? f.y + f.h - f.h * k : y, w: f.w * k, h: f.h * k };
+      } else if (e.altKey) {
+        r = { x, y, w, h };
+      } else {
+        r = snapResize({ x, y, w, h }, { left: hd.includes('w'), right: hd.includes('e'), top: hd.includes('n'), bottom: hd.includes('s') }, targetsFor(pageId, drag.ids), SNAP_PX / s);
+      }
+      if (r.w < 1 || r.h < 1) return;
+      let preview: EditorDocument;
+      try {
+        preview = ops.resizeGroup(doc, drag.ids, r, drag.mode);
+      } catch {
+        return; // e.g. a crop that would remove an item: stop at the last valid box
+      }
+      const rects: Record<string, Rect> = {};
+      for (const p of preview.placements) if (drag.ids.includes(p.id)) rects[p.id] = { x: p.xMm, y: p.yMm, w: p.wMm, h: p.hMm };
+      setDrag({ ...drag, rect: r, rects });
     } else if (drag.kind === 'margin') {
       const d = drag.side === 'top' || drag.side === 'bottom' ? (e.clientY - drag.startY) / s : (e.clientX - drag.startX) / s;
       const sign = drag.side === 'bottom' || drag.side === 'right' ? -1 : 1;
@@ -481,6 +543,8 @@ export function Editor({ projectId }: { projectId: string }) {
     setDrag(null);
     if (d.kind === 'move' && (Math.abs(d.dx) > 0.001 || Math.abs(d.dy) > 0.001)) commit((x) => ops.movePlacements(x, d.ids, r2(d.dx), r2(d.dy)));
     if (d.kind === 'resize') commit((x) => ops.setPlacementRect(x, d.id, { x: r2(d.rect.x), y: r2(d.rect.y), w: r2(d.rect.w), h: r2(d.rect.h) }));
+    if (d.kind === 'gresize' && Object.keys(d.rects).length)
+      commit((x) => ops.resizeGroup(x, d.ids, { x: r2(d.rect.x), y: r2(d.rect.y), w: r2(d.rect.w), h: r2(d.rect.h) }, d.mode));
     if (d.kind === 'margin' && d.value !== d.orig) commit((x) => ops.setMargins(x, { ...x.pageSetup.marginsMm, [d.side]: d.value }));
   };
 
@@ -540,15 +604,18 @@ export function Editor({ projectId }: { projectId: string }) {
     if (!f || !doc) return;
     // Overflow flags (reflow frames whose content is taller than the frame).
     const flags: Record<string, boolean> = {};
+    const heights: Record<string, number> = {};
     for (const p of doc.placements.filter((x) => x.pageId === pageId && x.fit === 'reflow' && !x.chainId)) {
       const idoc = innerDocs(f, p.id)[0];
       if (!idoc) continue;
       const root = idoc.querySelector('[data-ve-root]') as HTMLElement | null;
       const h = root ? root.getBoundingClientRect().height : idoc.documentElement.scrollHeight;
       flags[p.id] = h > mmToPx(p.hMm) + 0.5;
+      heights[p.id] = Math.ceil(h);
     }
     for (const c of doc.chains) for (const sl of c.slices) if (sl.overflow) flags[sl.placementId] = true;
     setOverflow((o) => ({ ...o, ...flags }));
+    setContentH((o) => (Object.entries(heights).every(([k, v]) => o[k] === v) ? o : { ...o, ...heights }));
     setFrameTick((t) => t + 1);
     wireContentMode();
   };
@@ -648,6 +715,8 @@ export function Editor({ projectId }: { projectId: string }) {
   const c = contentRectMm(doc.pageSetup);
   const sel = doc.placements.find((p) => p.id === selection[selection.length - 1]);
   const selDef = sel ? doc.components[sel.componentId] : undefined;
+  const groupSel = selectedGroup();
+  const groupBox = groupSel.length ? ops.boundsOf(groupSel) : null;
   const margins = drag?.kind === 'margin' ? { ...doc.pageSetup.marginsMm, [drag.side]: drag.value } : doc.pageSetup.marginsMm;
   const cDraft = drag?.kind === 'margin' ? contentRectMm({ ...doc.pageSetup, marginsMm: margins }) : c;
 
@@ -733,7 +802,7 @@ export function Editor({ projectId }: { projectId: string }) {
     return (
       <li key={item.mergedId ?? item.node.wpId}>
         <div
-          className={`lib-item${on ? ' on' : ''}${selWpId === item.node.wpId ? ' hl' : ''}`}
+          className={`lib-item${on ? ' on' : ''}${selWpId === item.node.wpId ? ' current' : ''}`}
           style={{ paddingLeft: 6 + depth * 12 }}
           data-wp={item.node.wpId}
           role="button"
@@ -796,6 +865,9 @@ export function Editor({ projectId }: { projectId: string }) {
         </label>
         <label>
           <input type="checkbox" checked={doc.showGrid} onChange={(e) => commit((d) => ({ ...d, showGrid: e.target.checked }))} /> Grid
+        </label>
+        <label title="Show content that runs off the page or out of its frame, dimmed (never exported)">
+          <input type="checkbox" checked={showOverflow} aria-label="Show overflow" onChange={(e) => setShowOverflow(e.target.checked)} /> Overflow
         </label>
         <button onClick={exportPdf} className="primary">{IS_STATIC ? 'Print / Save PDF' : 'Export PDF'}</button>
         {busy && <span role="status" className="status">{busy}</span>}
@@ -911,8 +983,10 @@ export function Editor({ projectId }: { projectId: string }) {
         {doc.pages.map((pg, pi) => {
           const placements = doc.placements.filter((p) => p.pageId === pg.id).sort((a, b) => a.z - b.z);
           const pf = proof[pg.id];
+          const ov = overflowSrc[pg.id];
+          const pad = ov?.pad ?? { l: 0, t: 0, r: 0, b: 0 };
           return (
-            <div key={pg.id} className="page-wrap">
+            <div key={pg.id} className="page-wrap" style={{ margin: `${12 + pad.t * zoom}px 16px ${20 + pad.b * zoom}px ${16 + pad.l * zoom}px` }}>
               <div className="page-head">
                 <span>Page {pi + 1}</span>
                 {!IS_STATIC && <button onClick={() => doProof(pg.id)} aria-pressed={!!pf}>{pf ? 'Hide proof' : 'Proof'}</button>}
@@ -941,6 +1015,25 @@ export function Editor({ projectId }: { projectId: string }) {
                     <line key={i} y1={i * s} y2={i * s} x1={18} x2={i % 10 === 0 ? 4 : i % 5 === 0 ? 10 : 14} />
                   ))}
                 </svg>
+                <div className="page-stage">
+                {ov && (
+                  <iframe
+                    title={`Overflow beyond page ${pi + 1}`}
+                    className="overflow-frame"
+                    data-testid={`overflow-frame-${pi + 1}`}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    sandbox="allow-same-origin"
+                    srcDoc={ov.html}
+                    style={{
+                      left: -pad.l * zoom,
+                      top: -pad.t * zoom,
+                      width: Math.ceil(mmToPx(t.width) + pad.l + pad.r),
+                      height: Math.ceil(mmToPx(t.height) + pad.t + pad.b),
+                      transform: zoom === 1 ? undefined : `scale(${zoom})`,
+                    }}
+                  />
+                )}
                 <div className="page" data-page-id={pg.id} style={{ width: t.width * s, height: t.height * s }}>
                   <iframe
                     ref={(el) => {
@@ -1027,14 +1120,32 @@ export function Editor({ projectId }: { projectId: string }) {
                           {inMargin.has(p.id) && <span className="warn-badge" title="Extends into the margin">!</span>}
                           {overflow[p.id] && <span className="overflow-badge" title="Content doesn't fit this frame" data-testid={`overflow-${p.id}`}>+</span>}
                           {p.chainId && <span className="chain-badge" title="Linked frame">⛓</span>}
-                          {isSel && !p.locked && contentEdit !== p.id &&
+                          {isSel && !p.locked && contentEdit !== p.id && !groupSel.length &&
                             (['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as Handle[]).map((h) => (
                               <span key={h} className={`handle h-${h}`} data-handle={h} onPointerDown={(e) => onHandleDown(e, p, h)} />
                             ))}
                         </div>
                       );
                     })}
+                    {groupSel.length > 0 && groupSel[0]!.pageId === pg.id && contentEdit === null && (() => {
+                      const gb = drag?.kind === 'gresize' ? drag.rect : ops.boundsOf(groupSel);
+                      const mode = drag?.kind === 'gresize' ? drag.mode : groupMode;
+                      return (
+                        <div
+                          className={`group-box mode-${mode}`}
+                          data-testid="group-box"
+                          aria-label={`Group of ${groupSel.length} (${mode === 'crop' ? 'crop' : 'resize'})`}
+                          style={{ left: gb.x * s, top: gb.y * s, width: gb.w * s, height: gb.h * s }}
+                        >
+                          {!groupSel.some((p) => p.locked) &&
+                            (['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as Handle[]).map((h) => (
+                              <span key={h} className={`handle h-${h}`} data-group-handle={h} onPointerDown={(e) => onGroupHandleDown(e, groupSel, h)} />
+                            ))}
+                        </div>
+                      );
+                    })()}
                   </div>
+                </div>
                 </div>
               </div>
             </div>
@@ -1060,6 +1171,40 @@ export function Editor({ projectId }: { projectId: string }) {
             </label>
           ))}
         </div>
+
+        {groupBox && (
+          <div className="group-tools" data-testid="group-tools">
+            <h2>Group of {groupSel.length}</h2>
+            <div className="seg" role="radiogroup" aria-label="Group handles">
+              <label><input type="radio" name="group-mode" checked={groupMode === 'scale'} onChange={() => setGroupMode('scale')} /> Resize</label>
+              <label><input type="radio" name="group-mode" checked={groupMode === 'crop'} onChange={() => setGroupMode('crop')} /> Crop</label>
+            </div>
+            <p className="muted small">
+              {groupMode === 'scale'
+                ? 'Handles scale everything in the group. Hold Shift on a corner to keep proportions.'
+                : 'Handles trim the group: content stays where it is and the parts outside the box are hidden.'}
+            </p>
+            <div className="fields">
+              {(['x', 'y', 'w', 'h'] as const).map((k) => (
+                <label key={k}>
+                  {k.toUpperCase()}
+                  <input
+                    type="number"
+                    step={0.1}
+                    aria-label={`Group ${k} (mm)`}
+                    key={`g-${k}-${r2(groupBox[k])}`}
+                    defaultValue={r2(groupBox[k])}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v) || v === r2(groupBox[k])) return;
+                      commit((d) => ops.resizeGroup(d, groupSel.map((p) => p.id), { ...groupBox, [k]: v }, k === 'x' || k === 'y' ? 'scale' : groupMode));
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {sel && selDef && (
           <>

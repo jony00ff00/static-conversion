@@ -71,7 +71,7 @@ h3 { font-size: 12px; margin: 10px 0 4px; }
 .lib-item { display: flex; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 4px; cursor: grab; user-select: none; }
 .lib-item:hover { background: var(--accent-soft); }
 .lib-item.on { background: var(--accent-soft); outline: 1px solid var(--accent); }
-.lib-item.hl .lib-name { font-weight: 600; }
+.lib-item.current .lib-name { font-weight: 600; }
 .lib-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-item, .tree { min-width: 0; overflow: hidden; }
 .lib-actions { display: none; gap: 2px; }
@@ -141,3 +141,14 @@ h3 { font-size: 12px; margin: 10px 0 4px; }
 }
 .notice { max-width: 72ch; margin: 8px 0 16px; padding: 10px 12px; border-radius: 6px; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--ink); }
 .small { font-size: 12px; }
+/* Overflow view: content beyond the page or its frame, dimmed (never exported). */
+.page-stage { position: relative; flex: none; }
+.overflow-frame { position: absolute; border: 0; transform-origin: 0 0; opacity: 0.35; pointer-events: none; z-index: 2; background: transparent; }
+.ruler-row, .page-head, .page-row > .ruler { position: relative; z-index: 6; }
+/* A selected group: one box with handles that resize or crop every item. */
+.group-box { position: absolute; z-index: 5; outline: 1px dashed var(--sel); outline-offset: 1px; pointer-events: none; }
+.group-box .handle { pointer-events: auto; }
+.group-box.mode-crop { outline: 2px solid var(--hl); }
+.group-box.mode-crop .handle { border-color: var(--hl); background: var(--hl); }
+.seg { display: flex; gap: 12px; margin: 4px 0; }
+.seg label { display: flex; gap: 4px; align-items: center; }

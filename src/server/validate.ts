@@ -18,6 +18,8 @@ const Placement = z.object({
   fit: z.enum(['reflow', 'scale', 'crop']),
   cropXPx: num.optional(),
   cropYPx: num.optional(),
+  cropScale: num.positive().optional(),
+  cropLayoutPx: num.positive().optional(),
   locked: z.boolean(),
   groupId: z.string().optional(),
   chainId: z.string().optional(),

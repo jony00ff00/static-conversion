@@ -1,10 +1,12 @@
 import { createRoot } from 'react-dom/client';
+import { zipSync } from 'fflate';
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { Editor } from './Editor.js';
 import { currentProjectId, goToProject, projectHref } from './nav.js';
 import { IS_STATIC, appBase } from '../static/env.js';
 import { UNSUPPORTED_URL } from '../static/backend.js';
+import { arrangeLooseFiles } from '../import/pure.js';
 
 function Home() {
   const [fixtures, setFixtures] = useState<string[]>([]);
@@ -34,12 +36,30 @@ function Home() {
     }
   };
 
-  const onZip = async (f: File | undefined) => {
-    if (!f) return;
-    const buf = new Uint8Array(await f.arrayBuffer());
+  const toBase64 = (buf: Uint8Array) => {
     let bin = '';
     for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    await go('Importing zip…', { type: 'zip', base64: btoa(bin), title: f.name });
+    return btoa(bin);
+  };
+
+  /** A .zip, or .html file(s) with any CSS, JS, images and fonts they use (packed into a zip). */
+  const onFiles = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
+    if (files.length === 1 && /\.zip$/i.test(files[0]!.name)) {
+      const f = files[0]!;
+      return go('Importing zip…', { type: 'zip', base64: toBase64(new Uint8Array(await f.arrayBuffer())), title: f.name });
+    }
+    const html = files.find((f) => /\.html?$/i.test(f.name));
+    if (!html) {
+      setError('Choose a .zip, or at least one .html file (with its CSS, JavaScript and images if it uses them).');
+      return;
+    }
+    const loose: Record<string, Uint8Array> = {};
+    for (const f of files) loose[f.name] = new Uint8Array(await f.arrayBuffer());
+    // Put stylesheets, scripts and images where the page links them.
+    const entries = arrangeLooseFiles(loose);
+    await go(`Importing ${html.name}…`, { type: 'zip', base64: toBase64(zipSync(entries)), title: html.name });
   };
 
   return (
@@ -65,7 +85,20 @@ function Home() {
         </div>
         <div className="card">
           <h2>Upload or link</h2>
-          <label>Zip file<input type="file" accept=".zip" aria-label="Zip file" onChange={(e) => onZip(e.target.files?.[0])} /></label>
+          <label>
+            HTML or zip file
+            <input
+              type="file"
+              multiple
+              accept=".html,.htm,.zip,.css,.js,.mjs,.json,.svg,.png,.jpg,.jpeg,.gif,.webp,.avif,.woff,.woff2,.ttf,.otf"
+              aria-label="HTML or zip file"
+              onChange={(e) => {
+                const input = e.currentTarget;
+                void onFiles(input.files).finally(() => (input.value = ''));
+              }}
+            />
+          </label>
+          <p className="muted small">An .html file, optionally selected together with its CSS, JavaScript and images; or a .zip of the whole site.</p>
           <label>Web address<input type="url" aria-label="Web address" placeholder="https://…" value={url} disabled={IS_STATIC} onChange={(e) => setUrl(e.target.value)} /></label>
           <button disabled={!!busy || !url || IS_STATIC} onClick={() => go('Recording page…', { type: 'url', url })}>Import from URL</button>
           {IS_STATIC && <p className="muted small">{UNSUPPORTED_URL}</p>}

@@ -98,6 +98,10 @@ export interface Placement {
   /** Crop offset in CSS px of the component (crop mode). */
   cropXPx?: number;
   cropYPx?: number;
+  /** Crop mode: scale of the component inside the frame (default 1). */
+  cropScale?: number;
+  /** Crop mode: width the component is laid out at, CSS px (default: its captured width). */
+  cropLayoutPx?: number;
   locked: boolean;
   groupId?: string;
   /** Part of a flow chain (auto-paginate / linked frames). */

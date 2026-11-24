@@ -5,7 +5,7 @@
  */
 import { PRINT_DEFAULTS } from '../config/printDefaults.js';
 import { PageSetupSchema, type PageSetup } from '../schema/document.js';
-import { contentRectMm, pxToMm, rectInside, type Rect } from './geometry.js';
+import { contentRectMm, mmToPx, pxToMm, rectInside, type Rect } from './geometry.js';
 import {
   DEFAULT_PRESETS,
   type Analysis,
@@ -231,6 +231,76 @@ export function group(doc: EditorDocument, ids: string[], groupId = newId('grp')
 export function ungroup(doc: EditorDocument, ids: string[]): EditorDocument {
   const d = clone(doc);
   for (const id of withGroup(d, ids)) delete find(d, id).groupId;
+  return d;
+}
+
+/** Bounding box of placements, in mm. */
+export function boundsOf(ps: Pick<Placement, 'xMm' | 'yMm' | 'wMm' | 'hMm'>[]): Rect {
+  const x = Math.min(...ps.map((p) => p.xMm));
+  const y = Math.min(...ps.map((p) => p.yMm));
+  return { x, y, w: Math.max(...ps.map((p) => p.xMm + p.wMm)) - x, h: Math.max(...ps.map((p) => p.yMm + p.hMm)) - y };
+}
+
+/** Crop parameters that draw a placement exactly as it looks now. */
+export function cropParams(p: Placement, def: ComponentDef) {
+  if (p.fit === 'crop') return { scale: p.cropScale ?? 1, layoutPx: p.cropLayoutPx ?? def.widthPx, xPx: p.cropXPx ?? 0, yPx: p.cropYPx ?? 0 };
+  if (p.fit === 'scale') return { scale: mmToPx(p.wMm) / def.widthPx, layoutPx: def.widthPx, xPx: 0, yPx: 0 };
+  return { scale: 1, layoutPx: mmToPx(p.wMm), xPx: 0, yPx: 0 };
+}
+
+export type GroupResizeMode = 'scale' | 'crop';
+
+/**
+ * Resize a group (or several selected items) as one, to the bounding box `to`.
+ * - scale: every item's position and size scale with the box; cropped items
+ *   scale their content too.
+ * - crop: the box trims the items; their content stays where it is (items are
+ *   switched to crop mode where they are trimmed).
+ */
+export function resizeGroup(doc: EditorDocument, ids: string[], to: Rect, mode: GroupResizeMode): EditorDocument {
+  const d = clone(doc);
+  const members = withGroup(d, ids).map((id) => find(d, id));
+  if (!members.length) throw new OpError('Nothing selected');
+  if (members.some((p) => p.locked)) throw new OpError('Unlock every item in the group to resize it');
+  if (to.w <= 0 || to.h <= 0) throw new OpError('Width and height must be positive');
+  const from = boundsOf(members);
+  if (mode === 'scale') {
+    const sx = to.w / from.w;
+    const sy = to.h / from.h;
+    for (const p of members) {
+      p.xMm = to.x + (p.xMm - from.x) * sx;
+      p.yMm = to.y + (p.yMm - from.y) * sy;
+      p.wMm *= sx;
+      p.hMm *= sy;
+      if (p.fit === 'crop') p.cropScale = (p.cropScale ?? 1) * sx;
+    }
+    return d;
+  }
+  for (const p of members) {
+    const def = d.components[p.componentId];
+    const x1 = Math.max(p.xMm, to.x);
+    const y1 = Math.max(p.yMm, to.y);
+    const x2 = Math.min(p.xMm + p.wMm, to.x + to.w);
+    const y2 = Math.min(p.yMm + p.hMm, to.y + to.h);
+    const tol = 1e-6;
+    if (x2 - x1 < 0.5 || y2 - y1 < 0.5) throw new OpError(`Cropping that far would remove "${def?.name ?? p.componentId}" completely`);
+    if (Math.abs(x1 - p.xMm) < tol && Math.abs(y1 - p.yMm) < tol && Math.abs(x2 - p.xMm - p.wMm) < tol && Math.abs(y2 - p.yMm - p.hMm) < tol) continue;
+    if (p.chainId) throw new OpError('Linked frames can\'t be cropped; unlink them first');
+    if (p.rotationDeg) throw new OpError('Rotated items can\'t be cropped as part of a group');
+    if (!def) continue;
+    const c = cropParams(p, def);
+    Object.assign(p, {
+      fit: 'crop',
+      cropScale: c.scale,
+      cropLayoutPx: c.layoutPx,
+      cropXPx: c.xPx + mmToPx(x1 - p.xMm) / c.scale,
+      cropYPx: c.yPx + mmToPx(y1 - p.yMm) / c.scale,
+      xMm: x1,
+      yMm: y1,
+      wMm: x2 - x1,
+      hMm: y2 - y1,
+    });
+  }
   return d;
 }
 
