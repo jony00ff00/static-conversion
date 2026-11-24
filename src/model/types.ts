@@ -172,6 +172,20 @@ export interface EditorDocument {
   presets: Presets;
   captureWidthPx: number;
   /** Recorded interactions replayed before capture ("Capture this state"). */
-  setupSteps: Array<{ action: 'click'; selector: string }>;
+  setupSteps: SetupStep[];
   showGrid: boolean;
 }
+
+/**
+ * One recorded interaction from the live preview, replayed before capture.
+ * - click: an element was clicked.
+ * - check: a checkbox or radio button ended up ticked or not (recorded as a
+ *   state, so clicking its label, or a hidden CSS-only toggle, replays correctly).
+ * - select: a drop-down was set to a value.
+ * - scroll: the page (selector null) or a scrollable element was scrolled to x, y.
+ */
+export type SetupStep =
+  | { action: 'click'; selector: string }
+  | { action: 'check'; selector: string; checked: boolean }
+  | { action: 'select'; selector: string; value: string }
+  | { action: 'scroll'; selector: string | null; x: number; y: number };

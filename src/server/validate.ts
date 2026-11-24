@@ -81,7 +81,14 @@ export const EditorDocumentSchema = z
     }),
     presets: z.object({ hideChrome: z.boolean(), expandInteractive: z.boolean(), printMedia: z.boolean(), linkUrls: z.boolean() }),
     captureWidthPx: z.number().int().min(200).max(4000),
-    setupSteps: z.array(z.object({ action: z.literal('click'), selector: z.string().max(2000) })),
+    setupSteps: z.array(
+      z.discriminatedUnion('action', [
+        z.object({ action: z.literal('click'), selector: z.string().max(2000) }),
+        z.object({ action: z.literal('check'), selector: z.string().max(2000), checked: z.boolean() }),
+        z.object({ action: z.literal('select'), selector: z.string().max(2000), value: z.string().max(10_000) }),
+        z.object({ action: z.literal('scroll'), selector: z.string().max(2000).nullable(), x: num, y: num }),
+      ]),
+    ).max(500),
     showGrid: z.boolean(),
   })
   .superRefine((d, ctx) => {

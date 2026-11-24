@@ -17,6 +17,8 @@ npm run dev    # http://localhost:5173
 | Clicking an element in the web pane highlights the same `data-wp-id` in both panes, boxes ±1 px (30+ elements per fixture, 3 fixtures) | `tests/e2e/m2-preview.test.ts` | ✅ |
 | Clicking in the print pane selects and highlights the same element in the web pane (≥ 90 % exact element) | same | ✅ |
 | "Capture this state" replays clicks recorded in the live pane | same | ✅ |
+| Checkboxes and radio buttons are recorded as their ticked state (labels, hidden CSS-only toggles); drop-downs as their value; the frozen page keeps that state | `tests/e2e/capture-steps.test.ts`, `tests/e2e/static-pages.test.ts` | ✅ |
+| Scrolling is recorded (one step per scroll gesture) and replayed with the page's timers and observers running; what it revealed stays after the capture returns to the top | same | ✅ |
 | Editor page vs server Proof < 1 % of pixels | same | ✅ |
 | 100 % zoom = 793.7 × 1122.5 px; ruler 3.7795 px/mm ±0.5 % | same | ✅ |
 | No console errors; no critical axe accessibility violations | same | ✅ |

@@ -56,6 +56,42 @@
       return { cancelled: n, setTimeout: _st, requestAnimationFrame: _raf };
     },
   });
+  // Recorded steps ("Capture this state") replay with the page's timers running
+  // again, so menus, scroll handlers and transitions can react; they are
+  // stopped once more afterwards.
+  Object.defineProperty(window, '__veResumeTimers', {
+    value: function () { stopped = false; },
+  });
+
+  // IntersectionObservers drive scroll reveals. They are disconnected after the
+  // recorded steps, so scrolling back to the top doesn't undo what scrolling did.
+  var observers = [];
+  var NativeIO = window.IntersectionObserver;
+  if (NativeIO) {
+    var TrackedIO = function (cb, opts) {
+      var o = new NativeIO(cb, opts);
+      observers.push(o);
+      return o;
+    };
+    TrackedIO.prototype = NativeIO.prototype;
+    window.IntersectionObserver = TrackedIO;
+  }
+  Object.defineProperty(window, '__veStopObservers', {
+    value: function () {
+      observers.forEach(function (o) { try { o.disconnect(); } catch (e) {} });
+      var n = observers.length;
+      observers = [];
+      return n;
+    },
+  });
+
+  // Registered before any page code, so it runs first: while muted, the page's
+  // scroll listeners don't see the editor scrolling back to the top.
+  var scrollMuted = false;
+  window.addEventListener('scroll', function (e) { if (scrollMuted) e.stopImmediatePropagation(); }, true);
+  Object.defineProperty(window, '__veMuteScroll', {
+    value: function (on) { scrollMuted = !!on; },
+  });
 
   // WebGL canvases discard their pixels after each frame unless
   // preserveDrawingBuffer is set, which makes toDataURL() return a blank image.

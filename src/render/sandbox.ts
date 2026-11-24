@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { collectFonts, type FontReport } from './fonts.js';
+import type { SetupStep } from '../model/types.js';
+import { describeStep } from './steps.js';
 
 // In-page helpers are plain browser JS, injected as text (never transpiled).
 const IN_PAGE_JS = readFileSync(path.join(import.meta.dirname, 'inPage.browser.js'), 'utf8');
@@ -330,7 +332,7 @@ export interface DecompositionResult {
 
 export interface RenderOptions extends SandboxOptions {
   /** Recorded interactions to replay after loading ("Capture this state"). */
-  setupSteps?: Array<{ action: 'click'; selector: string }>;
+  setupSteps?: SetupStep[];
   /** Print presets applied before IDs are stamped. */
   presets?: CapturePresets;
   /** Run component decomposition (with saved rules) after freezing. */
@@ -389,23 +391,39 @@ export async function settlePage(s: SandboxSession, url: string) {
   await page.evaluate('window.__ve.stopTimers()');
 }
 
+/**
+ * Replay recorded steps ("Capture this state") with the page's timers running,
+ * then stop them, disconnect observers and return to the top of the page.
+ * Clicks use real pointer events where the element can be clicked, falling
+ * back to element.click(); other steps are applied in the page.
+ */
+async function replaySteps(page: Page, steps: SetupStep[]): Promise<string[]> {
+  const errors: string[] = [];
+  if (!steps.length) return errors;
+  await page.evaluate('window.__ve.beginSteps()');
+  for (const step of steps) {
+    let err: string | null = null;
+    if (step.action === 'click') {
+      try {
+        await page.locator(step.selector).first().click({ timeout: 1_500 });
+      } catch {
+        err = (await page.evaluate(`window.__ve.applyStep(${JSON.stringify(step)})`)) as string | null;
+      }
+    } else {
+      err = (await page.evaluate(`window.__ve.applyStep(${JSON.stringify(step)})`)) as string | null;
+    }
+    if (err) errors.push(`${describeStep(step)}: ${err}`);
+    await page.evaluate('window.__ve.settleStep()');
+  }
+  await page.evaluate('window.__ve.endSteps()');
+  return errors;
+}
+
 /** Settle, stamp IDs, collect fonts, freeze and serialise, inside an open session. */
 export async function captureInSession(s: SandboxSession, url: string, opts: RenderOptions = {}): Promise<CaptureResult> {
   const { page } = s;
   await settlePage(s, url);
-  const stepErrors: string[] = [];
-  for (const step of opts.setupSteps ?? []) {
-    try {
-      await page.locator(step.selector).first().click({ timeout: 2_000 });
-      await page.evaluate('window.__ve.waitForAssets()');
-    } catch (e) {
-      stepErrors.push(`${step.action} ${step.selector}: ${(e as Error).message.split('\n')[0]}`);
-    }
-  }
-  if (opts.setupSteps?.length) {
-    await page.evaluate('window.__ve.freezeAnimations()');
-    await page.evaluate('window.__ve.stopTimers()');
-  }
+  const stepErrors = await replaySteps(page, opts.setupSteps ?? []);
   let presetReport: CaptureResult['presetReport'] = null;
   if (opts.presets) {
     if (opts.presets.printMedia) await page.emulateMedia({ media: 'print' });

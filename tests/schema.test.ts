@@ -113,3 +113,28 @@ describe('placements', () => {
     expect(DocumentSchema.safeParse(bad).success).toBe(false);
   });
 });
+
+describe('Recorded steps ("Capture this state")', async () => {
+  const { EditorDocumentSchema } = await import('../src/server/validate.js');
+  const { newEditorDocument } = await import('../src/model/ops.js');
+  const base = newEditorDocument({ captureWidthPx: 680, documentHeightPx: 100, baseUrl: '', pageBg: '#fff', nodes: [], warnings: [] }, 'body', 680);
+  base.components.page!.minFontPx = 12; // an empty test analysis has no text to measure
+  const withSteps = (setupSteps: unknown[]) => EditorDocumentSchema.safeParse({ ...base, setupSteps });
+
+  it('accepts clicks (as saved by earlier versions), ticks, choices and scrolls', () => {
+    const r = withSteps([
+      { action: 'click', selector: '#t2' },
+      { action: 'check', selector: '#more', checked: false },
+      { action: 'select', selector: '#size', value: 'l' },
+      { action: 'scroll', selector: null, x: 0, y: 2200 },
+      { action: 'scroll', selector: 'div:nth-of-type(2)', x: 300, y: 0 },
+    ]);
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects malformed steps', () => {
+    expect(withSteps([{ action: 'check', selector: '#more' }]).success).toBe(false);
+    expect(withSteps([{ action: 'scroll', selector: null, x: 0, y: Infinity }]).success).toBe(false);
+    expect(withSteps([{ action: 'hover', selector: 'a' }]).success).toBe(false);
+  });
+});

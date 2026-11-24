@@ -53,7 +53,9 @@ images selected alongside it), a zip or a URL. The web page appears on the left 
 A4 pages on the right. Drag components from the library or the web page onto a page,
 double-click a frame to edit its text, and use **Flow onto pages** for long content.
 Select grouped items to get one set of handles for the group: **Resize** scales every
-item, **Crop** trims them without moving their content. Content that runs off the page or
+item, **Crop** trims them without moving their content. In the **Live** web view, click, tick, choose and
+scroll until the page looks right, then **Capture this state**: those steps are replayed
+before every capture. Content that runs off the page or
 out of its frame is shown dimmed around the page (**Overflow** in the toolbar; it is never
 exported). **Export PDF** downloads the result.
 

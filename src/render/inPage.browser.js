@@ -55,6 +55,83 @@
     return r.cancelled;
   }
 
+  /* ------------------------------------------------------- recorded steps */
+
+  function nativeWait(ms) {
+    return new Promise(function (r) { nativeTimeout.call(window, r, ms); });
+  }
+  function frames(n) {
+    return new Promise(function (r) {
+      var left = n;
+      (function tick() { if (left-- <= 0) r(); else nativeRaf.call(window, tick); })();
+    });
+  }
+
+  /** Before replaying recorded steps: let the page's timers run again. */
+  function beginSteps() {
+    if (window.__veResumeTimers) window.__veResumeTimers();
+  }
+
+  function fire(el, type) {
+    el.dispatchEvent(new Event(type, { bubbles: true }));
+  }
+
+  /** Replay one recorded step. Returns null, or why it failed. */
+  function applyStep(step) {
+    if (step.action === 'scroll' && step.selector === null) {
+      window.scrollTo(step.x, step.y);
+      return null;
+    }
+    var el = null;
+    try { el = document.querySelector(step.selector); } catch (e) { return 'invalid selector'; }
+    if (!el) return 'element not found';
+    if (step.action === 'click') {
+      el.click();
+    } else if (step.action === 'check') {
+      // click() toggles even a hidden checkbox and fires the page's handlers.
+      if (el.checked !== step.checked) el.click();
+      if (el.checked !== step.checked) {
+        el.checked = step.checked;
+        fire(el, 'input');
+        fire(el, 'change');
+      }
+    } else if (step.action === 'select') {
+      el.value = step.value;
+      fire(el, 'input');
+      fire(el, 'change');
+    } else if (step.action === 'scroll') {
+      el.scrollLeft = step.x;
+      el.scrollTop = step.y;
+    } else {
+      return 'unknown step';
+    }
+    return null;
+  }
+
+  /** After a step: give the page time to react (handlers, observers, transitions). */
+  function settleStep() {
+    return waitForAssets().then(function () { return nativeWait(350); }).then(function () { return frames(2); });
+  }
+
+  /**
+   * After all steps: stop timers and observers, finish transitions, then put
+   * the page back at the top without its scroll listeners noticing, so what
+   * scrolling revealed or changed stays as it is.
+   */
+  function endSteps() {
+    stopTimers();
+    if (window.__veStopObservers) window.__veStopObservers();
+    freezeAnimations();
+    if (window.scrollX === 0 && window.scrollY === 0) return waitForAssets();
+    if (window.__veMuteScroll) window.__veMuteScroll(true);
+    window.scrollTo(0, 0);
+    return frames(3).then(function () {
+      if (window.__veMuteScroll) window.__veMuteScroll(false);
+      freezeAnimations();
+      return waitForAssets();
+    });
+  }
+
   /* ----------------------------------------------------------------- stamping */
 
   function fnv1a(s) {
@@ -507,8 +584,55 @@
    * Serialise the frozen DOM as a static document: scripts, noscript, inline
    * event handlers and javascript: URLs removed (they must not run, or show, again).
    */
+  /**
+   * Form state lives in properties (checked, value, selected), which HTML
+   * doesn't keep. Write any state that differs from the page's own markup
+   * into attributes, so CSS such as :checked and the visible values survive.
+   */
+  function bakeFormState(clone) {
+    var src = document.documentElement.querySelectorAll('input, textarea, select');
+    var dst = clone.querySelectorAll('input, textarea, select');
+    if (src.length !== dst.length) return 0;
+    var n = 0;
+    for (var i = 0; i < src.length; i++) {
+      var s = src[i], d = dst[i];
+      if (s.tagName === 'INPUT') {
+        var type = (s.type || '').toLowerCase();
+        if (type === 'checkbox' || type === 'radio') {
+          if (s.checked !== s.defaultChecked) {
+            if (s.checked) d.setAttribute('checked', ''); else d.removeAttribute('checked');
+            n++;
+          }
+        } else if (type !== 'file' && type !== 'password' && s.value !== s.defaultValue) {
+          d.setAttribute('value', s.value);
+          n++;
+        }
+      } else if (s.tagName === 'TEXTAREA') {
+        if (s.value !== s.defaultValue) { d.textContent = s.value; n++; }
+      } else if (s.tagName === 'SELECT') {
+        var opts = s.options, dOpts = d.querySelectorAll('option');
+        if (opts.length !== dOpts.length) continue;
+        var changed = false;
+        if (s.multiple) {
+          for (var j = 0; j < opts.length; j++) if (opts[j].selected !== opts[j].defaultSelected) changed = true;
+        } else {
+          var implied = 0;
+          for (var k = 0; k < opts.length; k++) if (opts[k].defaultSelected) implied = k;
+          changed = s.selectedIndex !== implied;
+        }
+        if (!changed) continue;
+        for (var m = 0; m < opts.length; m++) {
+          if (opts[m].selected) dOpts[m].setAttribute('selected', ''); else dOpts[m].removeAttribute('selected');
+        }
+        n++;
+      }
+    }
+    return n;
+  }
+
   function serializeDom() {
     var clone = document.documentElement.cloneNode(true);
+    bakeFormState(clone);
     clone.querySelectorAll('script').forEach(function (s) {
       if (!KEEP_SCRIPT_TYPES.test(s.type || '')) s.remove();
     });
@@ -862,6 +986,10 @@
       freezeAnimations: freezeAnimations,
       waitForAssets: waitForAssets,
       stopTimers: stopTimers,
+      beginSteps: beginSteps,
+      applyStep: applyStep,
+      settleStep: settleStep,
+      endSteps: endSteps,
       stampWpIds: stampWpIds,
       countUnstamped: countUnstamped,
       prepareFreeze: prepareFreeze,

@@ -9,7 +9,8 @@ import { ownText } from '../compose/isolate.js';
 import { contentRectMm, gridColumnsMm, mmToPx, PX_PER_MM, pxToMm, pxToPt, trimMm, type Rect } from '../model/geometry.js';
 import * as ops from '../model/ops.js';
 import { snapMove, snapResize, snapTargets } from '../model/snap.js';
-import type { ComponentDef, EditorDocument, Override, Placement } from '../model/types.js';
+import type { ComponentDef, EditorDocument, Override, Placement, SetupStep } from '../model/types.js';
+import { describeStep } from '../render/steps.js';
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 type Drag =
@@ -102,7 +103,7 @@ export function Editor({ projectId }: { projectId: string }) {
   const [selWpId, setSelWpId] = useState<string | null>(null);
   const [hoverWpId, setHoverWpId] = useState<string | null>(null);
   const [webMode, setWebMode] = useState<'frozen' | 'live'>('frozen');
-  const [pendingSteps, setPendingSteps] = useState<Array<{ action: 'click'; selector: string }>>([]);
+  const [pendingSteps, setPendingSteps] = useState<SetupStep[]>([]);
   const [zoom, setZoom] = useState(0.75);
   const [drag, setDragState] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -119,6 +120,7 @@ export function Editor({ projectId }: { projectId: string }) {
   const [contentH, setContentH] = useState<Record<string, number>>({});
   const [showOverflow, setShowOverflow] = useState(true);
   const [groupMode, setGroupMode] = useState<ops.GroupResizeMode>('scale');
+  const liveFrame = useRef<HTMLIFrameElement | null>(null);
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [hl, setHl] = useState<{ web: Rect | null; print: Rect[] }>({ web: null, print: [] });
@@ -326,12 +328,22 @@ export function Editor({ projectId }: { projectId: string }) {
   }, [doc]);
   useEffect(() => markOverridden(), [markOverridden]);
 
-  // Live pane: record clicks for "Capture this state".
+  // Live pane: record clicks, ticks, choices and scrolling for "Capture this state".
   useEffect(() => {
     const on = (e: MessageEvent) => {
-      if (e.data?.type === 've-click' && typeof e.data.selector === 'string') {
-        setPendingSteps((s) => [...s, { action: 'click', selector: e.data.selector }]);
-      }
+      if (e.data?.type !== 've-step' || e.source !== liveFrame.current?.contentWindow) return;
+      const step = e.data.step as SetupStep;
+      if (!step || !['click', 'check', 'select', 'scroll'].includes(step.action)) return;
+      setPendingSteps((s) => {
+        const last = s[s.length - 1];
+        // Scrolling the same thing again, or re-setting the same control: keep only where it ended up.
+        const same =
+          last &&
+          last.action === step.action &&
+          last.selector === step.selector &&
+          (step.action === 'scroll' || step.action === 'check' || step.action === 'select');
+        return same ? [...s.slice(0, -1), step] : [...s, step];
+      });
     };
     addEventListener('message', on);
     return () => removeEventListener('message', on);
@@ -933,12 +945,16 @@ export function Editor({ projectId }: { projectId: string }) {
           </div>
           {webMode === 'live' && (
             <>
-              <span className="muted">{pendingSteps.length} recorded click{pendingSteps.length === 1 ? '' : 's'}</span>
+              <details className="steps">
+                <summary className="muted" data-testid="recorded-steps">{pendingSteps.length} recorded step{pendingSteps.length === 1 ? '' : 's'}</summary>
+                <ol>{pendingSteps.map((st, i) => <li key={i}>{describeStep(st)}</li>)}</ol>
+              </details>
+              {pendingSteps.length > 0 && <button onClick={() => setPendingSteps([])}>Discard</button>}
               <button className="primary" onClick={() => { const steps = [...doc.setupSteps, ...pendingSteps]; setPendingSteps([]); setWebMode('frozen'); recapture({ setupSteps: steps }, 'Capturing this state…'); }}>Capture this state</button>
             </>
           )}
           {webMode === 'frozen' && doc.setupSteps.length > 0 && (
-            <button onClick={() => recapture({ setupSteps: [] })}>Clear {doc.setupSteps.length} recorded step(s)</button>
+            <button title={doc.setupSteps.map(describeStep).join('\n')} onClick={() => recapture({ setupSteps: [] })}>Clear {doc.setupSteps.length} recorded step(s)</button>
           )}
         </div>
         <div className="web-scroll" ref={webScroll}>
@@ -958,7 +974,7 @@ export function Editor({ projectId }: { projectId: string }) {
                     style={{ width: doc.captureWidthPx, height: h, transform: `scale(${ws})`, transformOrigin: '0 0' }}
                   />
                 ) : (
-                  <iframe title="Live web page" className="web-frame live" sandbox={IS_STATIC ? 'allow-scripts allow-forms allow-same-origin' : 'allow-scripts allow-forms'} src={liveUrl(projectId, (project.meta.source as unknown as { entry?: string }).entry ?? 'index.html')} style={{ width: doc.captureWidthPx, height: h, transform: `scale(${ws})`, transformOrigin: '0 0' }} />
+                  <iframe ref={liveFrame} title="Live web page" className="web-frame live" sandbox={IS_STATIC ? 'allow-scripts allow-forms allow-same-origin' : 'allow-scripts allow-forms'} src={liveUrl(projectId, (project.meta.source as unknown as { entry?: string }).entry ?? 'index.html')} style={{ width: doc.captureWidthPx, height: h, transform: `scale(${ws})`, transformOrigin: '0 0' }} />
                 )}
               </div>
             );

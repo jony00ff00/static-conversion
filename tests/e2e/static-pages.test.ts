@@ -12,6 +12,7 @@ import type { Server } from 'node:http';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createStaticServer, STATIC_PREFIX } from '../../scripts/serve-static.js';
 import { componentFrames, frozenFrame, getDoc, settle } from './harness.js';
+import { STATEFUL_PAGE } from './stateful-page.js';
 
 let server: Server | undefined;
 let browser: Browser | undefined;
@@ -156,6 +157,39 @@ describe('Static build (GitHub Pages)', () => {
       ve.commit((d) => ve.ops.setPlacementRect!(d, 'pl-page', { x: 150, y: 20, w: 180, h: 60 }));
     });
     await page.waitForSelector('[data-testid="overflow-frame-1"]');
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
+
+  it('captures ticked checkboxes, radio tabs and scrolling from the live preview', async () => {
+    const { page, errors } = await open();
+    await page.fill('textarea[aria-label="HTML"]', STATEFUL_PAGE.html);
+    await page.fill('textarea[aria-label="CSS"]', STATEFUL_PAGE.css);
+    await page.fill('textarea[aria-label="JavaScript"]', STATEFUL_PAGE.js);
+    await page.click('button:has-text("Import pasted code")');
+    await waitForEditor(page);
+    await page.click('[role="tab"]:has-text("Live")');
+    const live = (await (await page.waitForSelector('iframe[title="Live web page"]')).contentFrame())!;
+    await live.waitForSelector('#more-label');
+    await live.click('#more-label');
+    await live.click('#tab-b-label');
+    await live.evaluate(() => scrollTo(0, 2200));
+    await page.waitForSelector('text=3 recorded steps');
+    await page.click('button:has-text("Capture this state")');
+    await page.waitForSelector('iframe[title="Frozen web page"]');
+    await page.waitForFunction(() => !document.querySelector('.status'));
+    await settle(page);
+    const d = await getDoc(page);
+    expect(d.setupSteps).toEqual([
+      { action: 'check', selector: '#more', checked: true },
+      { action: 'check', selector: '#tab-b', checked: true },
+      { action: 'scroll', selector: null, x: 0, y: 2200 },
+    ]);
+    const web = await frozenFrame(page);
+    expect(await web.$eval('#more-box', (e) => getComputedStyle(e).display)).toBe('block');
+    expect(await web.$eval('#panel-b', (e) => getComputedStyle(e).display)).toBe('block');
+    expect(await web.getAttribute('#late', 'class')).toContain('shown');
+    expect(await web.getAttribute('#top', 'class')).toContain('scrolled');
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);

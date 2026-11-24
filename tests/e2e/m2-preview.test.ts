@@ -144,7 +144,7 @@ describe('M2: side-by-side preview', () => {
     const live = (await liveEl.contentFrame())!;
     await live.waitForSelector('#t2');
     await live.click('#t2');
-    await page.waitForSelector('text=1 recorded click');
+    await page.waitForSelector('text=1 recorded step');
     await page.click('button:has-text("Capture this state")');
     await page.waitForSelector('iframe[title="Frozen web page"]');
     await page.waitForFunction(() => !document.querySelector('.status'));

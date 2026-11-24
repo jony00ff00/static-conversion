@@ -7,7 +7,9 @@
  * - no font report (it needs the DevTools protocol).
  */
 import type { CapturePresets, DecompositionResult } from '../render/sandbox.js';
+import { describeStep } from '../render/steps.js';
 import type { FlowLayout } from '../flow/breaks.js';
+import type { SetupStep } from '../model/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Ve = Record<string, (...a: any[]) => any>;
@@ -63,7 +65,7 @@ export async function captureInBrowser(
   opts: {
     widthPx: number;
     presets?: CapturePresets;
-    setupSteps?: Array<{ action: 'click'; selector: string }>;
+    setupSteps?: SetupStep[];
     rules: Array<{ selector: string; action: 'component' | 'ignore' }>;
   },
 ): Promise<BrowserCapture> {
@@ -86,23 +88,15 @@ export async function captureInBrowser(
         ve.stopTimers!();
 
         const warnings: string[] = [];
-        for (const step of opts.setupSteps ?? []) {
-          let el: Element | null = null;
-          try {
-            el = win.document.querySelector(step.selector);
-          } catch {
-            /* invalid selector */
+        const steps = opts.setupSteps ?? [];
+        if (steps.length) {
+          ve.beginSteps!();
+          for (const step of steps) {
+            const err = ve.applyStep!(step) as string | null;
+            if (err) warnings.push(`Recorded step failed: ${describeStep(step)}: ${err}`);
+            await ve.settleStep!();
           }
-          if (!el) {
-            warnings.push(`Recorded step failed: ${step.action} ${step.selector}: element not found`);
-            continue;
-          }
-          (el as HTMLElement).click();
-          await ve.waitForAssets!();
-        }
-        if (opts.setupSteps?.length) {
-          await ve.freezeAnimations!();
-          ve.stopTimers!();
+          await ve.endSteps!();
         }
 
         let presetReport: BrowserCapture['presetReport'] = null;

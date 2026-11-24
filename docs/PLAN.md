@@ -40,7 +40,10 @@ rule-based and gives the same result every time.
 - **Drag from web to print:** dragging an element onto a page creates a component
   and places it in one step.
 - **Live / Frozen toggle and "Capture this state":** for content that only appears
-  after interaction, such as an open tab.
+  after interaction, such as an open tab. The live pane records clicks, ticked
+  checkboxes and radio buttons (as their state), drop-down choices and scrolling;
+  they are replayed before capture with the page's timers and observers running,
+  then the page returns to the top without its scroll handlers seeing it.
 - **Proof view:** the server's Chromium render is the reference, shown with a diff
   overlay against the editor.
 
