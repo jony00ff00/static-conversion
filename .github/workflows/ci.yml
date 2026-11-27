@@ -29,3 +29,4 @@ jobs:
         with:
           name: golden-diff
           path: .golden-diff/
+          include-hidden-files: true

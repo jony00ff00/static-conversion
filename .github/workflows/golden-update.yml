@@ -1,0 +1,39 @@
+name: Regenerate golden files
+
+# Renders every fixture on the same Playwright image as CI and uploads the new
+# golden files (plus any isolation-test diff images) as an artifact, for review
+# before they are committed. Run it from the Actions tab, or push to the
+# golden-update branch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [golden-update]
+
+permissions:
+  contents: read
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run golden:update
+      - name: Isolation test (diff images on failure)
+        continue-on-error: true
+        run: npx vitest run tests/m3-decomposition.test.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golden-ci
+          path: |
+            golden/
+            .golden-diff/
+          include-hidden-files: true
+          if-no-files-found: error
