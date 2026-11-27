@@ -30,6 +30,7 @@ jobs:
         continue-on-error: true
         run: npx vitest run tests/m3-decomposition.test.ts
       - name: Push results to the golden-results branch
+        shell: bash
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
