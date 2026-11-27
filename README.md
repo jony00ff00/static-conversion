@@ -35,6 +35,8 @@ an editable print preview, and the result exports at print quality. No LLM is us
 ## Getting started
 
 Requires Node 20+, and poppler-utils for the PDF tests (`apt install poppler-utils` or `brew install poppler`).
+Golden screenshots assume Inter is the default sans-serif and `system-ui` font, as in CI
+(`sudo sh scripts/ci-fonts.sh` sets that up on Ubuntu).
 
 ```bash
 npm install
@@ -77,7 +79,7 @@ npm run export:test-page -- margin-test-page.pdf
 | `npm run build:static` | Build the browser-only version into `dist-static/` (published to GitHub Pages from `main`) |
 | `npm run preview:static` | Serve `dist-static/` at http://localhost:5174/static-conversion/, as Pages does |
 | `npm run golden` | Render all fixtures and compare with `golden/` (diffs go to `.golden-diff/`) |
-| `npm run golden:update` | Rewrite the golden files. **Review the changed images before committing.** |
+| `npm run golden:update` | Rewrite the golden files. **Review the changed images before committing.** The reference copies are rendered on CI's Playwright image: run the *Regenerate golden files* workflow (Actions tab), which pushes them to the `golden-results` branch for review |
 | `npm run export -- <input> <out.pdf\|out.png> [options]` | Export a folder, .zip, .html file or URL to one A4 page. Options: `--margins=t,r,b,l`, `--landscape`, `--fit=clip\|shrink`, `--capture-width=px`, `--dpi=300`, `--guides`, `--report=file.json` |
 | `npm run export:test-page -- [out.pdf] [--margins=…]` | Margin test page with mm rulers, for the physical print check |
 | `npm run render -- <dir> <out>` | Render any folder of HTML/CSS/JS and save its frozen DOM and screenshot |

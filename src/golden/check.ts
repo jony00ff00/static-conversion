@@ -67,6 +67,15 @@ export async function writeGolden(fixture: string, r: RenderResult, e: ExportOut
   await writeFile(goldenPath(fixture, 'meta.json'), JSON.stringify(metaOf(r, e), null, 2) + '\n');
 }
 
+/**
+ * Frozen canvases and screenshots are embedded as PNG data URLs. Their bytes
+ * depend on anti-aliasing, which differs slightly between machines, so the
+ * golden DOM comparison ignores their contents; the screenshot and A4
+ * comparisons check how they look. (Repeat renders on one machine are still
+ * compared byte for byte by the determinism tests.)
+ */
+export const normaliseRasters = (html: string) => html.replace(/data:image\/png;base64,[A-Za-z0-9+/=]+/g, 'data:image/png;base64,<raster>');
+
 /** Render a fixture and compare it with its stored golden files. */
 export async function checkGolden(fixture: string, opts: { update?: boolean } = {}): Promise<GoldenOutcome> {
   const { r, e } = await renderBoth(fixture);
@@ -86,7 +95,7 @@ export async function checkGolden(fixture: string, opts: { update?: boolean } = 
   } catch {
     return { fixture, ok: false, domMatch: false, pixelRatio: 1, metaMatch: false, missingGolden: true, durationMs: r.durationMs, messages: ['no golden files — run npm run golden:update'] };
   }
-  const domMatch = dom === r.html;
+  const domMatch = normaliseRasters(dom) === normaliseRasters(r.html);
   if (!domMatch) messages.push('frozen DOM differs from golden');
   const diff = comparePng(png, r.screenshot, { withDiffImage: true });
   if (diff.sizeMismatch) messages.push('screenshot size differs from golden');
