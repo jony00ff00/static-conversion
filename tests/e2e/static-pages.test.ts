@@ -13,6 +13,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { createStaticServer, STATIC_PREFIX } from '../../scripts/serve-static.js';
 import { componentFrames, frozenFrame, getDoc, settle } from './harness.js';
 import { STATEFUL_PAGE } from './stateful-page.js';
+import { graphIdle, graphOfPage, openNodes, resultsOfPage, selectNode } from './nodes-harness.js';
 
 let server: Server | undefined;
 let browser: Browser | undefined;
@@ -190,6 +191,45 @@ describe('Static build (GitHub Pages)', () => {
     expect(await web.$eval('#panel-b', (e) => getComputedStyle(e).display)).toBe('block');
     expect(await web.getAttribute('#late', 'class')).toContain('shown');
     expect(await web.getAttribute('#top', 'class')).toContain('scrolled');
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
+
+  it('Nodes tab: the default graph, a page added and captured in the browser, and picking by selector', async () => {
+    const { page, errors } = await open();
+    await importFixture(page, '01-static');
+    await openNodes(page);
+    await graphIdle(page);
+    let r = await resultsOfPage(page);
+    for (const id of ['source', 'capture', 'components', 'layout', 'export']) expect(r[id]!.status, id).toBe('ok');
+    // Another page, pasted into a new Web Source and captured with its own settings (in a hidden iframe).
+    const palette = (label: string) => `.nodes-app .palette button.palette-item:has(.palette-label:text-is("${label}"))`;
+    await page.click(palette('Web Source'));
+    await page.click(palette('Capture'));
+    await page.click(palette('Pick'));
+    const [src, cap, pick] = (await graphOfPage(page)).nodes.slice(-3).map((n) => n.id) as [string, string, string];
+    await page.evaluate(
+      ({ src, cap, pick }) => {
+        const c = (window as unknown as { __veConnect: (e: object) => void }).__veConnect;
+        c({ source: src, sourcePort: 'files', target: cap, targetPort: 'files' });
+        c({ source: cap, sourcePort: 'capture', target: pick, targetPort: 'capture' });
+      },
+      { src, cap, pick },
+    );
+    await selectNode(page, src);
+    await page.click('.nodes-app .inspector summary:has-text("Or paste code")');
+    await page.fill('.nodes-app textarea[aria-label="Pasted HTML"]', '<section class="offer"><h2>Bread</h2></section><section class="offer"><h2>Milk</h2></section>');
+    await page.click('.nodes-app button:has-text("Import pasted code")');
+    await page.waitForSelector('.nodes-app [data-testid="source-page"] strong');
+    await selectNode(page, pick);
+    await page.fill('.nodes-app .inspector input[placeholder=".card, header"]', '.offer');
+    await graphIdle(page);
+    r = await resultsOfPage(page);
+    expect(r[cap]!.status).toBe('ok');
+    expect(r[pick]!.items).toHaveLength(2);
+    const frame = (await (await page.waitForSelector('.nodes-app .preview iframe[title="Pick components"]')).contentFrame())!;
+    await frame.waitForSelector('h2');
+    expect(await frame.$$eval('[data-ve-outline]', (els) => els.length)).toBe(2);
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);

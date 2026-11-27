@@ -5,7 +5,7 @@ and lays them out on **A4** pages with user-set margins. A live web preview sits
 an editable print preview, and the result exports at print quality. No LLM is used.
 
 - Full plan and milestones: [`docs/PLAN.md`](docs/PLAN.md)
-- Plan for a node-based editor (not built yet): [`docs/NODE-PLAN.md`](docs/NODE-PLAN.md)
+- Node-based editor (Nodes tab): plan [`docs/NODE-PLAN.md`](docs/NODE-PLAN.md), N0–N3 built and checked in [`docs/N0-N3-CHECKLIST.md`](docs/N0-N3-CHECKLIST.md)
 - Render sandbox: [`docs/SANDBOX.md`](docs/SANDBOX.md)
 - Milestone checks: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md), [`docs/M2-M6-CHECKLIST.md`](docs/M2-M6-CHECKLIST.md)
 - Final review (the only manual check): [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)

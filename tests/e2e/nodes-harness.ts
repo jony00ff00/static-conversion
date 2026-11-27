@@ -36,8 +36,20 @@ export async function connect(page: Page, from: string, fromPort: string, to: st
 export const graphOfPage = (page: Page) =>
   page.evaluate(() => (window as unknown as { __veGraph: () => Graph }).__veGraph());
 
+/** A summary of each node's result (see useTestHooks in NodesTab.tsx). */
+export interface ResultSummary {
+  status: string;
+  message?: string;
+  info: Record<string, unknown>;
+  warnings: string[];
+  /** Root element IDs of a components output. */
+  items?: string[];
+  overrides?: unknown[];
+  capture?: { key: string; nodes: unknown[]; settings: unknown };
+}
+
 export const resultsOfPage = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __veResults: () => Record<string, { status: string; message?: string; info: Record<string, unknown>; outputs: Record<string, unknown> }> }).__veResults());
+  page.evaluate(() => (window as unknown as { __veResults: () => Record<string, ResultSummary> }).__veResults());
 
 /** Wait until the graph has finished evaluating. */
 export const graphIdle = (page: Page) => page.evaluate(() => (window as unknown as { __veGraphIdle: () => Promise<void> }).__veGraphIdle());
