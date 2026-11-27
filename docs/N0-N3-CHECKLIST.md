@@ -44,8 +44,4 @@ only manual review stays the final output.
 | Changing the level of detail updates Components and Filter, never the capture; Filter order and first N | same | ✅ |
 | GitHub Pages build: default graph, a page added and captured in the browser, pick by selector | `tests/e2e/static-pages.test.ts` | ✅ |
 
-## Limits until N4–N6
-
-- Layout and Export nodes only show the Editor tab's pages; components from other nodes can't be placed yet.
-- Graph files don't carry the pages imported into Web Source nodes (they stay in the project).
-- The Nodes tab's preview isn't resizable or detachable yet (Node CMS's is).
+Layouts of their own, Flow, Combine and Export followed in [N4–N6](N4-N6-CHECKLIST.md).

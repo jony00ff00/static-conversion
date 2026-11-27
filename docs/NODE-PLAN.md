@@ -1,7 +1,7 @@
 # Plan: a node-based web-to-print editor
 
-Status: **N0–N3 built** on branch `node-editor-plan` (27 Nov 2026); N4–N6 still to do. Checks per milestone are in
-[`N0-N3-CHECKLIST.md`](N0-N3-CHECKLIST.md).
+Status: **N0–N6 built** on branch `node-editor-plan` (27 Nov 2026). Checks per milestone are in
+[`N0-N3-CHECKLIST.md`](N0-N3-CHECKLIST.md) and [`N4-N6-CHECKLIST.md`](N4-N6-CHECKLIST.md).
 
 **Decided** (27 Nov 2026): the node canvas starts as a **Nodes tab** next to today's editor; **Grid / repeat layout
 is not in the first release**; Node CMS's code is **copied** into this repo (no shared package).
@@ -128,9 +128,9 @@ Every milestone ends with automated checks; as before, the only manual review is
 | N1 ✅ | **Nodes tab** with the copied canvas: palette, generic node, ports, inspector shell, result panel, undo, project file; Editor tab unchanged; both builds | e2e: build the default graph by dragging; wrong drop shows its reason; undo/redo; save → open gives the same graph |
 | N2 ✅ | **Source + Capture nodes**, preview following the selection, Live tab and recorded steps on Capture | e2e: import → capture → frozen preview; the capture's analysis equals the current pipeline's for the 12 test pages |
 | N3 ✅ | **Components, Pick, Edit, Filter** nodes, outlines and click-to-pick in the preview | e2e: pick by selector and by click give the same IDs; overrides match M5 results; changing granularity updates downstream |
-| N4 | **Layout, Flow, Page Setup** nodes; the Editor tab edits the Layout node; one undo history across tabs | e2e: a v2 project's pages render pixel-identical (< 0.5 %) through the graph; every existing editor e2e test passes unchanged on the Editor tab; Flow matches `autoPaginate` slices; undo in one tab undoes an edit made in the other |
-| N5 | **Combine + Export**, multi-source documents | PDF page count and exact A4 page boxes, golden PDFs for two sample graphs; re-capturing a changed source updates the export with placements kept |
-| N6 | Groups, notes, minimap, starter graphs (brochure, flyer), performance, docs, Pages build | e2e on collapsed groups; a 40-node graph edits without re-capturing; golden files regenerated on CI |
+| N4 ✅ | **Layout, Flow, Page Setup** nodes; the Editor tab edits the Layout node; one undo history across tabs | e2e: a v2 project's pages render pixel-identical (< 0.5 %) through the graph; every existing editor e2e test passes unchanged on the Editor tab; Flow matches `autoPaginate` slices; undo in one tab undoes an edit made in the other |
+| N5 ✅ | **Combine + Export**, multi-source documents | PDF page count and exact A4 page boxes, golden PDFs for two sample graphs; re-capturing a changed source updates the export with placements kept |
+| N6 ✅ | Groups, notes, minimap, starter graphs (brochure, flyer), performance, docs, Pages build | e2e on collapsed groups; a 40-node graph edits without re-capturing; golden files regenerated on CI |
 
 ## Risks
 

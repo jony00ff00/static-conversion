@@ -13,7 +13,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { createStaticServer, STATIC_PREFIX } from '../../scripts/serve-static.js';
 import { componentFrames, frozenFrame, getDoc, settle } from './harness.js';
 import { STATEFUL_PAGE } from './stateful-page.js';
-import { graphIdle, graphOfPage, openNodes, resultsOfPage, selectNode } from './nodes-harness.js';
+import { addAfter, graphIdle, graphOfPage, openNodes, resultsOfPage, selectNode } from './nodes-harness.js';
 
 let server: Server | undefined;
 let browser: Browser | undefined;
@@ -233,6 +233,46 @@ describe('Static build (GitHub Pages)', () => {
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);
+
+  it('Nodes tab: a separate layout in the Editor tab, a Flow measured in the browser, and printing from an Export node', async () => {
+    const { page, errors } = await open();
+    await importFixture(page, '08-long-article');
+    await openNodes(page);
+    await graphIdle(page);
+    // A separate layout, copied from the project, drawn in the Editor tab.
+    await selectNode(page, 'layout');
+    await page.click('.nodes-app .inspector button:has-text("Make a separate layout")');
+    await graphIdle(page);
+    await selectNode(page, 'layout');
+    await page.click('.nodes-app .inspector button:has-text("Edit pages")');
+    await page.waitForSelector('[data-testid="page-frame-1"]');
+    await settle(page);
+    expect(await page.inputValue('select[aria-label="Pages to edit"]')).toBe('layout');
+    const [frame] = await componentFrames(page);
+    expect(await frame!.textContent('h1')).toContain('Paginating long-form web content');
+    // Flow: the article over as many pages as it needs, measured in this browser; then Export → print.
+    await page.click('[role="tab"]:has-text("Nodes")');
+    await page.waitForSelector('.nodes-app .react-flow__node');
+    const flow = await addAfter(page, 'Flow', 'components', 'components', 'components');
+    const exp = await addAfter(page, 'Export', flow, 'pages', 'pages');
+    const r = await resultsOfPage(page);
+    expect(r[flow]!.status).toBe('ok');
+    const pages = r[flow]!.pages!.document.pages.length;
+    expect(pages).toBeGreaterThan(3);
+    await page.evaluate(() => {
+      const w = window as unknown as { __vePrintHook(html: string): void; __printed?: string };
+      w.__vePrintHook = (html) => {
+        w.__printed = html;
+      };
+    });
+    await selectNode(page, exp);
+    await page.click('.nodes-app .inspector button:has-text("Print / Save PDF")');
+    const printed = (await (await page.waitForFunction(() => (window as unknown as { __printed?: string }).__printed)).jsonValue()) as string;
+    expect((printed.match(/class="ve-page"/g) ?? []).length).toBe(pages);
+    expect(printed).toContain('size: 210mm 297mm');
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 180_000);
 
   it('turns off importing from a web address, with an explanation', async () => {
     const { page } = await open();

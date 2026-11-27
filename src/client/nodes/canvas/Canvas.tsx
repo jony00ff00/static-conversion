@@ -1,11 +1,11 @@
 // Copied from Node CMS (jony00ff00/cms-test-23nov26) src/ui/canvas/Canvas.tsx at c22a45d, adapted: no example
-// buttons; a Reset to the default graph instead of Clear.
+// buttons; a Reset to the default graph instead of Clear, and starter graphs.
 import {
   applyNodeChanges, Background, Controls, MiniMap, Panel, ReactFlow, useReactFlow, type Connection, type Edge,
   type EdgeChange, type FinalConnectionState, type IsValidConnection, type NodeChange, useNodesInitialized,
 } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import { edgeError, nodeRegistry, type EdgeCandidate } from '../engine.js';
+import { edgeError, nodeRegistry, STARTERS, type EdgeCandidate, type StarterKind } from '../engine.js';
 import { editorStore, selectedNodeIds, useEditor } from '../store.js';
 import { CmsNode, type CmsFlowNode } from './CmsNode.js';
 import { DeletableEdge } from './DeletableEdge.js';
@@ -342,6 +342,17 @@ export function Canvas() {
           >
             Reset graph
           </button>
+          <select
+            aria-label="Add a starter graph"
+            value=""
+            title="Add a ready-made set of nodes next to the graph"
+            onChange={(e) => e.target.value && editorStore.getState().addStarter(e.target.value as StarterKind)}
+          >
+            <option value="">Add a starter…</option>
+            {(Object.keys(STARTERS) as StarterKind[]).map((k) => (
+              <option key={k} value={k} title={STARTERS[k].description}>{STARTERS[k].label}</option>
+            ))}
+          </select>
           {evaluating && <span className="running" role="status">Running…</span>}
         </Panel>
         <Panel position="top-right">

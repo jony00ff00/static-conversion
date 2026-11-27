@@ -34,6 +34,8 @@ function useTestHooks() {
     const w = window as unknown as Record<string, unknown>;
     w.__veGraph = () => editorStore.getState().graph;
     w.__veGraphIdle = () => editorStore.getState().whenIdle();
+    w.__veLastRan = () => editorStore.getState().lastRan;
+    w.__veStore = () => editorStore;
     w.__veConnect = (e: Parameters<ReturnType<typeof editorStore.getState>['connect']>[0]) => editorStore.getState().connect(e);
     w.__veResults = () =>
       Object.fromEntries(

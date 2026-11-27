@@ -8,7 +8,7 @@ import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import {
   connect as connectEdge, GraphEvaluator, nodeRegistry, moveEdge, type CanvasNote, type EdgeCandidate, type Graph,
-  type GraphNode, type GraphServices, type NodeRegistry, type NodeResult, type ProjectSnapshot, defaultGraph,
+  type GraphNode, type GraphServices, type NodeRegistry, type NodeResult, type ProjectSnapshot, defaultGraph, starterGraph, type StarterKind,
 } from './engine.js';
 import { parseProject, projectToJson } from './project.js';
 import { groupOfNode, groupsOf, nextGroupColor, nextGroupId, nextGroupName, pruneGroups, withoutNodes } from './groups.js';
@@ -76,6 +76,12 @@ export interface EditorState {
   setProject(project: ProjectSnapshot | null): void;
   /** Replace the graph with the default one (linked to the Editor tab). */
   resetGraph(): void;
+  /** Add a starter graph next to the nodes, grouped, with a note (one undo step). Returns the group's id. */
+  addStarter(kind: StarterKind): string | undefined;
+  /** Nodes that actually ran in the last evaluation (not from the cache). */
+  lastRan: string[];
+  /** How many evaluations have finished (for tests and diagnostics). */
+  evaluations: number;
   clear(): void;
   notify(kind: Notice['kind'], text: string): void;
   dismissNotice(): void;
@@ -156,6 +162,8 @@ export function createEditorStore(options: EditorOptions) {
     graph: options.graph,
     project: options.project,
     results: {},
+    lastRan: [],
+    evaluations: 0,
     evaluating: false,
     fitRequest: 1,
 
@@ -428,6 +436,23 @@ export function createEditorStore(options: EditorOptions) {
       set({ project });
     },
 
+    addStarter(kind) {
+      const add = starterGraph(get().graph, kind, (type) => registry[type]!.defaultConfig());
+      if (!add) {
+        get().notify('error', 'A starter begins from the project page’s Capture node; reset the graph to get it back.');
+        return undefined;
+      }
+      return batch(() => {
+        const { graph } = get();
+        set({ graph: { ...graph, nodes: [...graph.nodes, ...add.nodes], edges: [...graph.edges, ...add.edges] } });
+        const groupId = get().groupNodes(add.group.nodeIds, add.group.name);
+        const noteId = get().addNote(add.note.position, add.note.text);
+        if (add.note.width) get().updateNote(noteId, { width: add.note.width });
+        set({ fitRequest: get().fitRequest + 1 });
+        return groupId;
+      });
+    },
+
     resetGraph() {
       set({ graph: defaultGraph(), selectedId: undefined, selectedIds: undefined, selectedGroupId: undefined, fitRequest: get().fitRequest + 1 });
     },
@@ -452,9 +477,9 @@ export function createEditorStore(options: EditorOptions) {
       set({ evaluating: true });
       running = evaluator
         .evaluate(graph, { projectId: options.projectId, services: options.services, project })
-        .then(({ results }) => {
+        .then(({ results, ran }) => {
           // A newer evaluation started while this one ran: its results win.
-          if (id === runId) set({ results, evaluating: false, graphError: undefined });
+          if (id === runId) set({ results, lastRan: ran, evaluations: get().evaluations + 1, evaluating: false, graphError: undefined });
         })
         .catch((err: Error) => {
           if (id === runId) set({ evaluating: false, graphError: err.message });

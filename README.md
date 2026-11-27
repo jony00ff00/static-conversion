@@ -5,7 +5,7 @@ and lays them out on **A4** pages with user-set margins. A live web preview sits
 an editable print preview, and the result exports at print quality. No LLM is used.
 
 - Full plan and milestones: [`docs/PLAN.md`](docs/PLAN.md)
-- Node-based editor (Nodes tab): plan [`docs/NODE-PLAN.md`](docs/NODE-PLAN.md), N0–N3 built and checked in [`docs/N0-N3-CHECKLIST.md`](docs/N0-N3-CHECKLIST.md)
+- Node-based editor (Nodes tab): plan [`docs/NODE-PLAN.md`](docs/NODE-PLAN.md); built and checked in [`docs/N0-N3-CHECKLIST.md`](docs/N0-N3-CHECKLIST.md) and [`docs/N4-N6-CHECKLIST.md`](docs/N4-N6-CHECKLIST.md)
 - Render sandbox: [`docs/SANDBOX.md`](docs/SANDBOX.md)
 - Milestone checks: [`docs/M0-CHECKLIST.md`](docs/M0-CHECKLIST.md), [`docs/M1-CHECKLIST.md`](docs/M1-CHECKLIST.md), [`docs/M2-M6-CHECKLIST.md`](docs/M2-M6-CHECKLIST.md)
 - Final review (the only manual check): [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)
@@ -61,6 +61,12 @@ scroll until the page looks right, then **Capture this state**: those steps are 
 before every capture. Content that runs off the page or
 out of its frame is shown dimmed around the page (**Overflow** in the toolbar; it is never
 exported). **Export PDF** downloads the result.
+
+The **Nodes** tab shows the same project as a graph: Web Source → Capture → Components →
+Layout → Export, linked to the Editor tab. Add nodes to bring in other pages, pick and edit
+components, lay them out on pages of their own (edited in the Editor tab: **Pages**), flow long
+content over pages, and combine and export the result. **Add a starter…** adds a brochure or a
+flyer-and-article graph to start from. Undo covers both tabs.
 
 Export a page from the command line:
 
