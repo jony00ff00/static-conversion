@@ -1,6 +1,8 @@
-// Copied from Node CMS (jony00ff00/cms-test-23nov26) src/ui/canvas/ProjectToolbar.tsx at c22a45d, reworded: the graph is saved with the project.
+// Copied from Node CMS (jony00ff00/cms-test-23nov26) src/ui/canvas/ProjectToolbar.tsx at c22a45d, reworded: the graph is saved with the project;
+// Undo / Redo follow the shared undo log.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { useStore } from 'zustand';
+import { useSyncExternalStore } from 'react';
+import { undoLog } from '../../undo-log.js';
 import { editorStore, selectedNodeIds, useEditor } from '../store.js';
 import { SaveDialog } from './SaveDialog.js';
 
@@ -9,8 +11,9 @@ const mod = isMac ? '⌘' : 'Ctrl+';
 
 /** Undo / redo, save / open project file, and the autosave status. */
 export function ProjectToolbar() {
-  const canUndo = useStore(editorStore.temporal, (t) => t.pastStates.length > 0);
-  const canRedo = useStore(editorStore.temporal, (t) => t.futureStates.length > 0);
+  // One undo history across the Editor and Nodes tabs (see undo-log.ts).
+  const log = useSyncExternalStore((fn) => undoLog.subscribe(fn), () => `${undoLog.canUndo} ${undoLog.canRedo}`);
+  const [canUndo, canRedo] = log.split(' ').map((x) => x === 'true');
   const savedAt = useEditor((s) => s.savedAt);
   const fileInput = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);

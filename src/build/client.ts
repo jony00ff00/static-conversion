@@ -22,7 +22,8 @@ export function clientBuildOptions(o: { static: boolean }): BuildOptions {
       'process.env.NODE_ENV': '"production"',
       __STATIC__: String(o.static),
       __IN_PAGE_JS__: o.static ? JSON.stringify(text('src/render/inPage.browser.js')) : '""',
-      __FLOW_JS__: o.static ? JSON.stringify(text('src/flow/layout.browser.js')) : '""',
+      // Both builds: the Nodes tab and the Editor tab's layouts measure flow in the browser.
+      __FLOW_JS__: JSON.stringify(text('src/flow/layout.browser.js')),
     },
   };
 }

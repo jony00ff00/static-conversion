@@ -13,6 +13,8 @@ export interface TreeItem {
   label: string;
   /** Number of components sharing this item's repeatKey in the visible tree. */
   repeatCount: number;
+  /** The exact component to place, when it comes from elsewhere (a Layout node's inputs). */
+  def?: ComponentDef;
 }
 
 /** wpIds that are components at this granularity and with these manual edits. */

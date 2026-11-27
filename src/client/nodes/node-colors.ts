@@ -7,7 +7,9 @@ export const NODE_COLORS: Record<string, string> = {
   pick: '#b45309',
   edit: '#be185d',
   filter: '#4f46e5',
+  pageSetup: '#7c3aed',
   layout: '#059669',
+  flow: '#0d9488',
   export: '#dc2626',
 };
 export const UNKNOWN_NODE_COLOR = '#cbd5e1';

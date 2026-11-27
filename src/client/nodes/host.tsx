@@ -3,6 +3,7 @@ import { createContext, useContext } from 'react';
 import type { EditorDocument } from '../../model/types.js';
 import { api } from '../api.js';
 import type { GraphServices } from './engine.js';
+import { measureFlowInBrowser } from '../../static/capture.js';
 
 export interface NodesHost {
   projectId: string;
@@ -10,8 +11,8 @@ export interface NodesHost {
   document: EditorDocument;
   /** Entry page of the project's own source (for its live view). */
   mainEntry: string;
-  /** Switch to the Editor tab. */
-  openEditor(): void;
+  /** Switch to the Editor tab, on the project's pages or a Layout node's. */
+  openEditor(layoutId?: string): void;
   /** Re-capture the project page with new settings, as the Editor tab does (for linked Capture nodes). */
   recaptureProject(patch: Partial<EditorDocument>): Promise<void>;
 }
@@ -38,5 +39,6 @@ export function clientServices(projectId: string): GraphServices {
       };
     },
     parseHtml: (html) => new DOMParser().parseFromString(html, 'text/html'),
+    measureFlow: (html, widthPx) => measureFlowInBrowser(html, widthPx),
   };
 }

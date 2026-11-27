@@ -1,7 +1,7 @@
 /** Browser-side composition: isolation with DOMParser, cached per component/width/overrides. */
 import { isolateComponent } from '../compose/isolate.js';
 import { composePageHtml, type HtmlFor } from '../compose/page.js';
-import type { ComponentDef, EditorDocument } from '../model/types.js';
+import type { ComponentDef, EditorDocument, Override } from '../model/types.js';
 import { IS_STATIC, vfsUrl } from '../static/env.js';
 
 const parser = typeof DOMParser !== 'undefined' ? new DOMParser() : null;
@@ -27,13 +27,20 @@ export function liveUrl(projectId: string, entry: string): string {
 
 const cache = new Map<string, string>();
 
-export function makeHtmlFor(projectId: string, frozenHtml: string, baseUrl: string, doc: EditorDocument): HtmlFor {
+/** Other captures a layout of the Nodes tab draws from (by `ComponentDef.captureKey`), and edits made upstream. */
+export interface ComposeExtras {
+  captures?: Record<string, { frozenHtml: string; baseUrl: string }>;
+  overrides?: Override[];
+}
+
+export function makeHtmlFor(projectId: string, frozenHtml: string, baseUrl: string, doc: EditorDocument, extras: ComposeExtras = {}): HtmlFor {
   return (def: ComponentDef, widthPx: number) => {
-    const ov = doc.overrides.filter((o) => o.componentId === def.id);
-    const key = `${projectId}|${frozenHtml.length}|${JSON.stringify(def)}|${widthPx.toFixed(3)}|${JSON.stringify(ov)}`;
+    const src = (def.captureKey && extras.captures?.[def.captureKey]) || { frozenHtml, baseUrl };
+    const ov = [...(extras.overrides ?? []), ...doc.overrides].filter((o) => o.componentId === def.id);
+    const key = `${projectId}|${src.frozenHtml.length}|${src.baseUrl}|${JSON.stringify(def)}|${widthPx.toFixed(3)}|${JSON.stringify(ov)}`;
     let html = cache.get(key);
     if (!html) {
-      html = isolateComponent(parse, frozenHtml, def, { widthPx, overrides: ov, baseUrl });
+      html = isolateComponent(parse, src.frozenHtml, def, { widthPx, overrides: ov, baseUrl: src.baseUrl });
       if (cache.size > 400) cache.clear();
       cache.set(key, html);
     }
@@ -41,8 +48,8 @@ export function makeHtmlFor(projectId: string, frozenHtml: string, baseUrl: stri
   };
 }
 
-export function pageHtml(projectId: string, frozenHtml: string, baseUrl: string, doc: EditorDocument, pageId: string) {
-  return composePageHtml(doc, pageId, makeHtmlFor(projectId, frozenHtml, baseUrl, doc));
+export function pageHtml(projectId: string, frozenHtml: string, baseUrl: string, doc: EditorDocument, pageId: string, extras?: ComposeExtras) {
+  return composePageHtml(doc, pageId, makeHtmlFor(projectId, frozenHtml, baseUrl, doc, extras));
 }
 
 /** Frozen document for the web pane, with assets resolved through the editor server. */

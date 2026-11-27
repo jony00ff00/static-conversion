@@ -132,6 +132,10 @@ function summarize(node: GraphNode, result: NodeResult | undefined): string {
       return info.kept !== undefined ? `${info.kept} of ${info.of} kept` : 'Keeps every component';
     case 'layout':
       return info.pages !== undefined ? `${n(info.pages, 'page')} · ${n(info.frames, 'frame')}` : '';
+    case 'flow':
+      return info.pages !== undefined ? `${n(info.pages, 'page')} · ${c.which === 'each' ? 'each component' : 'first component'}` : c.which === 'each' ? 'Each component' : 'The first component';
+    case 'pageSetup':
+      return info.page !== undefined ? `${info.page} · ${info.margins}` : '';
     case 'export':
       return info.pages !== undefined ? `${n(info.pages, 'page')} ready` : 'Connect pages';
     default:

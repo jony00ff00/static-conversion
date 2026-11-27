@@ -105,6 +105,10 @@ export interface EditorOptions {
   autosaveDelay?: number;
   /** Edits to the same node's settings closer together than this become one undo step (typing). Default 1000. */
   undoGrouping?: number;
+  /** Called when a new undo step is recorded (for the shared undo log). */
+  onRecord?: () => void;
+  /** Undo / redo go through this instead of the store's own history (the shared undo log). */
+  undoRedo?: { undo(): void; redo(): void };
 }
 
 const NODE_SPACING = 280;
@@ -133,6 +137,7 @@ export function createEditorStore(options: EditorOptions) {
     if (batchDepth === 0) {
       const { graph } = store.getState();
       store.temporal.setState({ pastStates: [...t.pastStates, { graph }].slice(-100), futureStates: [] });
+      options.onRecord?.();
       t.pause();
     }
     batchDepth++;
@@ -481,11 +486,13 @@ export function createEditorStore(options: EditorOptions) {
     },
 
     undo() {
-      store.temporal.getState().undo();
+      if (options.undoRedo) options.undoRedo.undo();
+      else store.temporal.getState().undo();
     },
 
     redo() {
-      store.temporal.getState().redo();
+      if (options.undoRedo) options.undoRedo.redo();
+      else store.temporal.getState().redo();
     },
   }), {
     // Only the project itself is undoable; selection, results and notices are not.
@@ -502,7 +509,10 @@ export function createEditorStore(options: EditorOptions) {
         groupKey = undefined;
         const now = Date.now();
         const sameGroup = key !== undefined && key === lastKey && now - last < grouping;
-        if (!sameGroup) handleSet(...args);
+        if (!sameGroup) {
+          handleSet(...args);
+          options.onRecord?.();
+        }
         last = now;
         lastKey = key;
       };
@@ -558,7 +568,7 @@ export let editorStore: EditorStore = createEditorStore({
   projectId: '',
   graph: { nodes: [], edges: [] },
   project: null,
-  services: { capture: () => Promise.reject(new Error('No project is open')), parseHtml: () => { throw new Error('No project is open'); } },
+  services: { capture: () => Promise.reject(new Error('No project is open')), parseHtml: () => { throw new Error('No project is open'); }, measureFlow: () => Promise.reject(new Error('No project is open')) },
   evaluateDelay: 1e9,
 });
 

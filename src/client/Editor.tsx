@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as RPointerEvent } from 'react';
 import { api, type ProjectPayload } from './api.js';
 import { clientBaseUrl, frozenForPane, liveUrl, makeHtmlFor, pageHtml, parse } from './render.js';
 import { composeOverflowHtml, type Pad } from '../compose/page.js';
 import { homeHref } from './nav.js';
 import { IS_STATIC } from '../static/env.js';
 import { NodesTab } from './nodes/NodesTab.js';
+import { useProjectGraph } from './nodes/graph-session.js';
+import { editorStore as graphStoreRef, useEditor as useGraph } from './nodes/store.js';
+
+/** The open graph store (a live binding: it is replaced when a project's graph opens). */
+const graphStore = () => graphStoreRef;
+import { undoLog } from './undo-log.js';
+import { emptyLayout, refreshLayout, type PagesValue } from '../graph/index.js';
+import type { LayoutConfig } from '../graph/nodes/layout.js';
+import type { ComposeExtras } from './render.js';
+import { autoPaginateDoc, reflowChainDoc } from '../flow/paginate.js';
+import { measureFlowInBrowser } from '../static/capture.js';
 import type { NodesHost } from './nodes/host.js';
 import { hashString } from '../graph/hash.js';
 import type { ProjectSnapshot } from '../graph/values.js';
@@ -99,9 +110,11 @@ function minFontPt(def: ComponentDef, p: Placement): number | null {
 
 export function Editor({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectPayload | null>(null);
-  const [frozen, setFrozen] = useState('');
+  const [projectFrozen, setFrozen] = useState('');
   const historyRef = useRef<ops.History | null>(null);
-  const [doc, setDoc] = useState<EditorDocument | null>(null);
+  const [projectDoc, setDoc] = useState<EditorDocument | null>(null);
+  /** Which pages the Editor tab edits: the project's own ('project'), or a Layout node's (its id). */
+  const [target, setTarget] = useState<string>('project');
   const [selection, setSelection] = useState<string[]>([]);
   const [libSel, setLibSel] = useState<string[]>([]);
   const [selWpId, setSelWpId] = useState<string | null>(null);
@@ -159,7 +172,7 @@ export function Editor({ projectId }: { projectId: string }) {
     loadProject().catch((e) => setToast({ kind: 'error', text: String(e) }));
   }, [loadProject]);
 
-  const baseUrl = project ? clientBaseUrl(projectId, project.analysis.baseUrl) : '';
+  const projectBaseUrl = project ? clientBaseUrl(projectId, project.analysis.baseUrl) : '';
 
   const persist = useCallback(
     (d: EditorDocument) => {
@@ -171,19 +184,32 @@ export function Editor({ projectId }: { projectId: string }) {
     [projectId],
   );
 
+  const docRef = useRef<EditorDocument | null>(null);
   const commit = useCallback(
     (op: (d: EditorDocument) => EditorDocument) => {
-      const h = historyRef.current;
-      if (!h) return;
       try {
+        if (target !== 'project') {
+          // A Layout node's pages: the change goes into the graph (one undo step there).
+          const cur = docRef.current;
+          if (!cur) return;
+          const next = op(cur);
+          if (next === cur) return;
+          graphStore().getState().updateConfig<LayoutConfig>(target, (c) => ({ ...c, linked: false, document: next }));
+          return;
+        }
+        const h = historyRef.current;
+        if (!h) return;
+        const before = h.present;
         const next = h.apply(op);
+        if (next === before) return;
+        undoLog.record('editor');
         setDoc(next);
         persist(next);
       } catch (e) {
         setToast({ kind: 'error', text: (e as Error).message });
       }
     },
-    [persist],
+    [persist, target],
   );
 
   const replaceDoc = useCallback(
@@ -193,26 +219,35 @@ export function Editor({ projectId }: { projectId: string }) {
     [commit],
   );
 
-  const undo = () => {
-    const h = historyRef.current;
-    if (!h) return;
-    const d = h.undo();
-    setDoc(d);
-    persist(d);
-  };
-  const redo = () => {
-    const h = historyRef.current;
-    if (!h) return;
-    const d = h.redo();
-    setDoc(d);
-    persist(d);
-  };
+  // The Editor's own steps in the shared undo history (see undo-log.ts).
+  useEffect(() => {
+    undoLog.register('editor', {
+      undo: () => {
+        const h = historyRef.current;
+        if (!h?.canUndo) return;
+        const d = h.undo();
+        setDoc(d);
+        persist(d);
+      },
+      redo: () => {
+        const h = historyRef.current;
+        if (!h?.canRedo) return;
+        const d = h.redo();
+        setDoc(d);
+        persist(d);
+      },
+    });
+  });
+  const undo = () => undoLog.undo();
+  const redo = () => undoLog.redo();
+  const logState = useSyncExternalStore((fn) => undoLog.subscribe(fn), () => `${undoLog.canUndo} ${undoLog.canRedo}`);
+  const [canUndo, canRedo] = logState.split(' ').map((x) => x === 'true');
 
   const recapture = async (patch: Partial<EditorDocument>, label = 'Re-capturing…') => {
-    if (!doc) return;
+    if (!projectDoc) return;
     setBusy(label);
     try {
-      await api.save(projectId, doc);
+      await api.save(projectId, projectDoc);
       const p = await api.recapture(projectId, patch);
       const f = await api.frozen(projectId);
       setProject(p);
@@ -227,24 +262,108 @@ export function Editor({ projectId }: { projectId: string }) {
     }
   };
 
+  // What nodes linked to the Editor tab see: this document and the project page's capture.
+  const frozenKey = useMemo(() => (projectFrozen ? hashString(projectFrozen) : ''), [projectFrozen]);
+  const snapshot = useMemo<ProjectSnapshot | null>(
+    () =>
+      project && projectDoc && projectFrozen
+        ? {
+            title: project.meta.title,
+            document: projectDoc,
+            capture: {
+              sourceId: 'main',
+              key: `main:${frozenKey}`,
+              settings: { captureWidthPx: project.analysis.captureWidthPx, presets: projectDoc.presets, setupSteps: projectDoc.setupSteps, rules: projectDoc.decomposition.rules },
+              analysis: project.analysis,
+              frozenHtml: projectFrozen,
+              bodyWpId: project.bodyWpId,
+              baseUrl: projectBaseUrl,
+            },
+          }
+        : null,
+    [project, projectDoc, projectFrozen, frozenKey, projectBaseUrl],
+  );
+  const nodesHost = useMemo<NodesHost | null>(
+    () =>
+      projectDoc && project
+        ? {
+            projectId,
+            document: projectDoc,
+            mainEntry: (project.meta.source as unknown as { entry?: string }).entry ?? 'index.html',
+            openEditor: (layoutId?: string) => {
+              setTarget(layoutId ?? 'project');
+              setTab('editor');
+            },
+            recaptureProject: (patch) => recapture(patch, 'Capturing…'),
+          }
+        : null,
+    [projectId, projectDoc, project], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // The project's graph: open with the project, so the Editor tab can edit Layout nodes and both tabs share undo.
+  const graphReady = useProjectGraph(projectId, snapshot);
+  const isLayout = target !== 'project' && graphReady;
+  const layoutCfgDoc = useGraph((s) => (isLayout ? ((s.graph.nodes.find((n) => n.id === target)?.config as LayoutConfig | undefined)?.document ?? null) : null));
+  const layoutExists = useGraph((s) => s.graph.nodes.some((n) => n.id === target && n.type === 'layout'));
+  const layoutPages = useGraph((s) => (isLayout && s.results[target]?.status === 'ok' ? (s.results[target]!.outputs.pages as PagesValue) : undefined));
+  const setupConnected = useGraph((s) => s.graph.edges.some((e) => e.target === target && e.targetPort === 'setup'));
+  const layouts = useGraph((s) => s.graph.nodes.filter((n) => n.type === 'layout' && !(n.config as LayoutConfig).linked).map((n) => ({ id: n.id, label: n.name?.trim() || n.id })).sort((a, b) => a.label.localeCompare(b.label)).map((l) => `${l.id}\u0000${l.label}`).join('\u0001'));
+  // A Layout node's pages have no live page of their own.
+  useEffect(() => {
+    if (target !== 'project') setWebMode('frozen');
+  }, [target]);
+  // Back to the project's pages if the Layout node goes away.
+  useEffect(() => {
+    if (target !== 'project' && graphReady && !layoutExists) setTarget('project');
+  }, [target, graphReady, layoutExists]);
+  const layoutDoc = useMemo(() => {
+    if (!isLayout || !layoutPages) return null;
+    const base = layoutCfgDoc ?? emptyLayout(setupConnected ? layoutPages.document.pageSetup : undefined, layoutPages.capture.settings.captureWidthPx);
+    return refreshLayout(base, layoutPages.available, setupConnected ? layoutPages.document.pageSetup : undefined).document;
+  }, [isLayout, layoutPages, layoutCfgDoc, setupConnected]);
+  const layoutCapture = isLayout ? layoutPages?.capture : undefined;
+  // What the Editor shows and edits: the project's pages and capture, or the Layout node's.
+  const doc = isLayout ? layoutDoc : projectDoc;
+  docRef.current = doc;
+  const frozen = layoutCapture ? layoutCapture.frozenHtml : projectFrozen;
+  const baseUrl = layoutCapture ? layoutCapture.baseUrl : projectBaseUrl;
+  const analysis = layoutCapture ? layoutCapture.analysis : project?.analysis;
+  const bodyWpId = layoutCapture ? layoutCapture.bodyWpId : project?.bodyWpId ?? '';
+  const extras = useMemo<ComposeExtras | undefined>(
+    () =>
+      layoutPages
+        ? { captures: Object.fromEntries(Object.entries(layoutPages.captures).map(([k, c]) => [k, { frozenHtml: c.frozenHtml, baseUrl: c.baseUrl }])), overrides: layoutPages.overrides }
+        : undefined,
+    [layoutPages],
+  );
+
   /* -------------------------------------------------------- derived data */
 
-  const tree = useMemo(() => (project && doc ? buildTree(project.analysis.nodes, doc.decomposition) : []), [project, doc?.decomposition]);
+  const tree = useMemo((): TreeItem[] => {
+    if (!project || !doc || !analysis) return [];
+    if (!isLayout || !layoutPages) return buildTree(analysis.nodes, doc.decomposition);
+    // A Layout node's library: what comes into it, as it comes (components chosen upstream).
+    return layoutPages.available.map((def) => {
+      const cap = (def.captureKey && layoutPages.captures[def.captureKey]) || layoutPages.capture;
+      const node = cap.analysis.nodes.find((n) => n.wpId === def.rootWpId) ?? { wpId: def.rootWpId, parentWpId: null, depth: 1, tag: 'body', kind: def.kind, name: def.name, score: 1, bbox: { x: 0, y: 0, w: def.widthPx, h: def.heightPx }, bg: def.bg, repeatKey: null, minFontPx: def.minFontPx, atomic: false };
+      return { node, children: [], label: def.name, repeatCount: 1, def };
+    });
+  }, [project, doc?.decomposition, analysis, isLayout, layoutPages]); // eslint-disable-line react-hooks/exhaustive-deps
   const flat = useMemo(() => flattenTree(tree), [tree]);
   const pageSrc = useMemo(() => {
     if (!project || !doc || !frozen) return {} as Record<string, string>;
     const out: Record<string, string> = {};
-    for (const pg of doc.pages) out[pg.id] = pageHtml(projectId, frozen, baseUrl, doc, pg.id);
+    for (const pg of doc.pages) out[pg.id] = pageHtml(projectId, frozen, baseUrl, doc, pg.id, extras);
     return out;
-  }, [project, doc, frozen, baseUrl, projectId]);
+  }, [project, doc, frozen, baseUrl, projectId, extras]);
   // Dimmed view of content that runs off the page or out of its frame (editor only).
   const overflowSrc = useMemo(() => {
     if (!project || !doc || !frozen || !showOverflow) return {} as Record<string, { html: string; pad: Pad } | null>;
-    const htmlFor = makeHtmlFor(projectId, frozen, baseUrl, doc);
+    const htmlFor = makeHtmlFor(projectId, frozen, baseUrl, doc, extras);
     const out: Record<string, { html: string; pad: Pad } | null> = {};
     for (const pg of doc.pages) out[pg.id] = composeOverflowHtml(doc, pg.id, htmlFor, contentH);
     return out;
-  }, [project, doc, frozen, baseUrl, projectId, contentH, showOverflow]);
+  }, [project, doc, frozen, baseUrl, projectId, contentH, showOverflow, extras]);
   const webSrc = useMemo(() => (frozen && baseUrl ? frozenForPane(frozen, baseUrl) : ''), [frozen, baseUrl]);
   const inMargin = useMemo(() => new Set(doc ? ops.placementsInMargin(doc) : []), [doc]);
 
@@ -359,7 +478,7 @@ export function Editor({ projectId }: { projectId: string }) {
 
   const nodeFor = (wp: string) => {
     if (!project) return null;
-    const byId = new Map(project.analysis.nodes.map((n) => [n.wpId, n]));
+    const byId = new Map(analysis!.nodes.map((n) => [n.wpId, n]));
     let n = byId.get(wp);
     if (n) return n;
     // Walk up the frozen DOM to the nearest analysed component.
@@ -378,7 +497,7 @@ export function Editor({ projectId }: { projectId: string }) {
     const fr = webFrame.current!.getBoundingClientRect();
     const sx = fr.width / webFrame.current!.offsetWidth;
     const start = { x: fr.left + e.clientX * sx, y: fr.top + e.clientY * sx };
-    const def = defFromItem(item as TreeItem);
+    const def = (item as TreeItem).def ?? defFromItem(item as TreeItem);
     const move = (ev: PointerEvent) => {
       const x = fr.left + ev.clientX * sx;
       const y = fr.top + ev.clientY * sx;
@@ -715,7 +834,7 @@ export function Editor({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     window.__ve = {
-      getDoc: () => historyRef.current?.present,
+      getDoc: () => docRef.current,
       getSelection: () => selection,
       getHighlights: () => hl,
       getSelectedWpId: () => selWpId,
@@ -727,41 +846,6 @@ export function Editor({ projectId }: { projectId: string }) {
       projectId,
     };
   });
-
-  // What nodes linked to the Editor tab see: this document and the project page's capture.
-  const frozenKey = useMemo(() => (frozen ? hashString(frozen) : ''), [frozen]);
-  const snapshot = useMemo<ProjectSnapshot | null>(
-    () =>
-      project && doc && frozen
-        ? {
-            title: project.meta.title,
-            document: doc,
-            capture: {
-              sourceId: 'main',
-              key: `main:${frozenKey}`,
-              settings: { captureWidthPx: project.analysis.captureWidthPx, presets: doc.presets, setupSteps: doc.setupSteps, rules: doc.decomposition.rules },
-              analysis: project.analysis,
-              frozenHtml: frozen,
-              bodyWpId: project.bodyWpId,
-              baseUrl,
-            },
-          }
-        : null,
-    [project, doc, frozen, frozenKey, baseUrl],
-  );
-  const nodesHost = useMemo<NodesHost | null>(
-    () =>
-      doc && project
-        ? {
-            projectId,
-            document: doc,
-            mainEntry: (project.meta.source as unknown as { entry?: string }).entry ?? 'index.html',
-            openEditor: () => setTab('editor'),
-            recaptureProject: (patch) => recapture(patch, 'Capturing…'),
-          }
-        : null,
-    [projectId, doc, project], // eslint-disable-line react-hooks/exhaustive-deps
-  );
 
   if (!project || !doc) return <main className="loading">{toast ? <p role="alert">{toast.text}</p> : 'Loading…'}</main>;
 
@@ -777,7 +861,7 @@ export function Editor({ projectId }: { projectId: string }) {
   const placeItem = (item: TreeItem) => {
     const pageId = sel?.pageId ?? doc.pages[0]!.id;
     const merged = item.mergedId ? doc.decomposition.merged.find((m) => m.id === item.mergedId) : undefined;
-    commit((d) => ops.placeComponent(d, defFromItem(item, merged), pageId, { xMm: c.x, yMm: c.y }));
+    commit((d) => ops.placeComponent(d, item.def ?? defFromItem(item, merged), pageId, { xMm: c.x, yMm: c.y }));
   };
 
   const decomp = (patch: Partial<EditorDocument['decomposition']>) => commit((d) => ({ ...d, decomposition: { ...d.decomposition, ...patch } }));
@@ -789,12 +873,17 @@ export function Editor({ projectId }: { projectId: string }) {
     return el.tagName.toLowerCase() + cls.map((x) => `.${x}`).join('');
   };
 
+  /** Flow layout measured in this browser, for a Layout node's pages (the server only knows the project's own). */
+  const measureHere = (def: ComponentDef, widthPx: number) => measureFlowInBrowser(makeHtmlFor(projectId, frozen, baseUrl, doc, extras)(def, widthPx), widthPx);
+
   const flowOntoPages = async () => {
     if (!sel) return;
     setBusy('Flowing onto pages…');
     try {
-      await api.save(projectId, doc);
-      const r = await api.paginate(projectId, sel.componentId, sel.pageId, ops.deletePlacements(doc, [sel.id]));
+      const base = ops.deletePlacements(doc, [sel.id]);
+      const r = isLayout
+        ? await autoPaginateDoc(base, sel.componentId, sel.pageId, measureHere)
+        : (await api.save(projectId, doc), await api.paginate(projectId, sel.componentId, sel.pageId, base));
       replaceDoc(r.document);
     } catch (e) {
       setToast({ kind: 'error', text: (e as Error).message });
@@ -808,7 +897,7 @@ export function Editor({ projectId }: { projectId: string }) {
       const next = ops.linkFrames(doc, selection);
       const chainId = next.chains[next.chains.length - 1]!.id;
       setBusy('Linking frames…');
-      const r = await api.reflowChain(projectId, chainId, next);
+      const r = isLayout ? await reflowChainDoc(next, chainId, measureHere) : await api.reflowChain(projectId, chainId, next);
       replaceDoc(r.document);
     } catch (e) {
       setToast({ kind: 'error', text: (e as Error).message });
@@ -835,6 +924,7 @@ export function Editor({ projectId }: { projectId: string }) {
   };
 
   const exportPdf = async () => {
+    if (isLayout) return exportLayout();
     setBusy('Exporting PDF…');
     try {
       await api.save(projectId, doc);
@@ -849,6 +939,11 @@ export function Editor({ projectId }: { projectId: string }) {
     } finally {
       setBusy('');
     }
+  };
+
+  /** A Layout node's pages: exported through the graph (milestone N5). */
+  const exportLayout = async () => {
+    setToast({ kind: 'info', text: 'Export a layout from an Export node in the Nodes tab.' });
   };
 
   const libItem = (item: TreeItem, depth = 0): JSX.Element => {
@@ -868,7 +963,7 @@ export function Editor({ projectId }: { projectId: string }) {
           }}
           onPointerDown={(e) => {
             const start = { x: e.clientX, y: e.clientY };
-            const def = defFromItem(item, item.mergedId ? doc.decomposition.merged.find((m) => m.id === item.mergedId) : undefined);
+            const def = item.def ?? defFromItem(item, item.mergedId ? doc.decomposition.merged.find((m) => m.id === item.mergedId) : undefined);
             const mv = (ev: PointerEvent) => {
               if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 6) {
                 removeEventListener('pointermove', mv);
@@ -884,10 +979,10 @@ export function Editor({ projectId }: { projectId: string }) {
           {item.repeatCount > 1 && <span className="badge" title="Repeated">×{item.repeatCount}</span>}
           <span className="lib-actions">
             <button aria-label={`Place ${item.label}`} title="Place on page" onClick={(e) => (e.stopPropagation(), placeItem(item))}>＋</button>
-            {item.children.length > 0 || project.analysis.nodes.some((n) => n.parentWpId === item.node.wpId) ? (
+            {!isLayout && (item.children.length > 0 || analysis!.nodes.some((n) => n.parentWpId === item.node.wpId)) ? (
               <button aria-label={`Split ${item.label}`} title="Split into parts" onClick={(e) => (e.stopPropagation(), decomp({ split: [...doc.decomposition.split, item.node.wpId] }))}>⇲</button>
             ) : null}
-            <button aria-label={`Remove ${item.label} from library`} title="Not a component" onClick={(e) => (e.stopPropagation(), decomp({ demoted: [...doc.decomposition.demoted, item.node.wpId] }))}>×</button>
+            {!isLayout && <button aria-label={`Remove ${item.label} from library`} title="Not a component" onClick={(e) => (e.stopPropagation(), decomp({ demoted: [...doc.decomposition.demoted, item.node.wpId] }))}>×</button>}
           </span>
         </div>
         {item.children.length > 0 && <ul className="plain">{item.children.map((ch) => libItem(ch, depth + 1))}</ul>}
@@ -895,7 +990,7 @@ export function Editor({ projectId }: { projectId: string }) {
     );
   };
 
-  const selNode = selWpId ? project.analysis.nodes.find((n) => n.wpId === selWpId) : undefined;
+  const selNode = selWpId ? analysis!.nodes.find((n) => n.wpId === selWpId) : undefined;
   const libItemsSel = flat.filter((i) => libSel.includes(i.node.wpId));
 
   const tabs = (
@@ -914,7 +1009,7 @@ export function Editor({ projectId }: { projectId: string }) {
           {tabs}
           {busy && <span role="status" className="status">{busy}</span>}
         </header>
-        <NodesTab host={nodesHost} snapshot={snapshot} />
+        <NodesTab host={nodesHost} ready={graphReady} />
         {toast && <div role={toast.kind === 'error' ? 'alert' : 'status'} className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       </div>
     );
@@ -926,12 +1021,26 @@ export function Editor({ projectId }: { projectId: string }) {
         <a href={homeHref()} className="brand">Static Conversion</a>
         <strong className="title">{project.meta.title}</strong>
         {tabs}
-        <button onClick={undo} disabled={!historyRef.current?.canUndo} aria-label="Undo">↶ Undo</button>
-        <button onClick={redo} disabled={!historyRef.current?.canRedo} aria-label="Redo">↷ Redo</button>
-        <label>
-          Detail
-          <input type="range" min={1} max={4} value={doc.decomposition.granularity} aria-label="Component granularity" onChange={(e) => decomp({ granularity: Number(e.target.value) })} />
-        </label>
+        <button onClick={undo} disabled={!canUndo} aria-label="Undo">↶ Undo</button>
+        <button onClick={redo} disabled={!canRedo} aria-label="Redo">↷ Redo</button>
+        {layouts && (
+          <label>
+            Pages
+            <select aria-label="Pages to edit" value={isLayout ? target : 'project'} onChange={(e) => (setSelection([]), setContentEdit(null), setTarget(e.target.value))}>
+              <option value="project">Project pages</option>
+              {layouts.split('\u0001').map((l) => {
+                const [id, label] = l.split('\u0000') as [string, string];
+                return <option key={id} value={id}>Layout: {label}</option>;
+              })}
+            </select>
+          </label>
+        )}
+        {!isLayout && (
+          <label>
+            Detail
+            <input type="range" min={1} max={4} value={doc.decomposition.granularity} aria-label="Component granularity" onChange={(e) => decomp({ granularity: Number(e.target.value) })} />
+          </label>
+        )}
         <label>
           Zoom
           <select aria-label="Zoom" value={String(zoom)} onChange={(e) => setZoom(Number(e.target.value))}>
@@ -952,31 +1061,32 @@ export function Editor({ projectId }: { projectId: string }) {
 
       <aside className="library" aria-label="Components">
         <h2>Components</h2>
+        {isLayout && <p className="muted small" data-testid="layout-library">What comes into this Layout node. Choose components in the Nodes tab.</p>}
         <div className="lib-tools">
-          <button disabled={libItemsSel.length < 2} onClick={() => {
+          {!isLayout && <button disabled={libItemsSel.length < 2} onClick={() => {
             const nodes = libItemsSel.map((i) => i.node);
-            const root = commonAncestor(nodes, project.analysis.nodes) ?? nodes[0]!.parentWpId ?? project.bodyWpId;
+            const root = commonAncestor(nodes, analysis!.nodes) ?? nodes[0]!.parentWpId ?? bodyWpId;
             decomp({ merged: [...doc.decomposition.merged, { id: ops.newId('merge'), rootWpId: root, wpIds: nodes.map((n) => n.wpId) }] });
             setLibSel([]);
-          }}>Merge</button>
-          <button disabled={!libItemsSel[0]?.node.repeatKey} onClick={() => setLibSel(flat.filter((i) => i.node.repeatKey && i.node.repeatKey === libItemsSel[0]!.node.repeatKey).map((i) => i.node.wpId))}>Select similar</button>
+          }}>Merge</button>}
+          {!isLayout && <button disabled={!libItemsSel[0]?.node.repeatKey} onClick={() => setLibSel(flat.filter((i) => i.node.repeatKey && i.node.repeatKey === libItemsSel[0]!.node.repeatKey).map((i) => i.node.wpId))}>Select similar</button>}
           <button disabled={!libItemsSel.length} onClick={() => libItemsSel.forEach(placeItem)}>Place selected</button>
-          <button disabled={!doc.decomposition.split.length && !doc.decomposition.demoted.length && !doc.decomposition.merged.length && !doc.decomposition.promoted.length} onClick={() => decomp({ split: [], demoted: [], merged: [], promoted: [] })}>Reset edits</button>
+          {!isLayout && <button disabled={!doc.decomposition.split.length && !doc.decomposition.demoted.length && !doc.decomposition.merged.length && !doc.decomposition.promoted.length} onClick={() => decomp({ split: [], demoted: [], merged: [], promoted: [] })}>Reset edits</button>}
         </div>
         <ul className="plain tree">{tree.map((i) => libItem(i))}</ul>
-        {selWpId && !flat.some((i) => i.node.wpId === selWpId) && (
+        {!isLayout && selWpId && !flat.some((i) => i.node.wpId === selWpId) && (
           <div className="card">
             <p>Selected element isn't a component.</p>
             {selNode && <button onClick={() => decomp({ promoted: [...doc.decomposition.promoted, selWpId], demoted: doc.decomposition.demoted.filter((x) => x !== selWpId) })}>Make it a component</button>}
           </div>
         )}
-        {selWpId && (
+        {!isLayout && selWpId && (
           <div className="rules">
             <button onClick={() => { const sl = selectorFor(selWpId); if (sl) recapture({ decomposition: { ...doc.decomposition, rules: [...doc.decomposition.rules, { selector: sl, action: 'component' }] } }); }}>Always a component</button>
             <button onClick={() => { const sl = selectorFor(selWpId); if (sl) recapture({ decomposition: { ...doc.decomposition, rules: [...doc.decomposition.rules, { selector: sl, action: 'ignore' }] } }); }}>Never a component</button>
           </div>
         )}
-        {doc.decomposition.rules.length > 0 && (
+        {!isLayout && doc.decomposition.rules.length > 0 && (
           <div>
             <h3>Saved rules</h3>
             <ul className="plain">
@@ -989,6 +1099,8 @@ export function Editor({ projectId }: { projectId: string }) {
             </ul>
           </div>
         )}
+        {!isLayout && (
+          <>
         <h3>Print presets</h3>
         {(['hideChrome', 'expandInteractive', 'printMedia', 'linkUrls'] as const).map((k) => (
           <label key={k} className="row">
@@ -1000,13 +1112,15 @@ export function Editor({ projectId }: { projectId: string }) {
           Capture width (px)
           <input type="number" aria-label="Capture width" defaultValue={doc.captureWidthPx} min={200} max={4000} onBlur={(e) => Number(e.target.value) !== doc.captureWidthPx && recapture({ captureWidthPx: Number(e.target.value) })} />
         </label>
+          </>
+        )}
       </aside>
 
       <section className="web-pane" aria-label="Web page">
         <div className="pane-head">
           <div role="tablist" aria-label="Web view">
             <button role="tab" aria-selected={webMode === 'frozen'} onClick={() => setWebMode('frozen')}>Frozen</button>
-            <button role="tab" aria-selected={webMode === 'live'} disabled={!project.liveAvailable} onClick={() => setWebMode('live')}>Live</button>
+            <button role="tab" aria-selected={webMode === 'live'} disabled={!project.liveAvailable || isLayout} onClick={() => setWebMode('live')}>Live</button>
           </div>
           {webMode === 'live' && (
             <>
@@ -1018,14 +1132,14 @@ export function Editor({ projectId }: { projectId: string }) {
               <button className="primary" onClick={() => { const steps = [...doc.setupSteps, ...pendingSteps]; setPendingSteps([]); setWebMode('frozen'); recapture({ setupSteps: steps }, 'Capturing this state…'); }}>Capture this state</button>
             </>
           )}
-          {webMode === 'frozen' && doc.setupSteps.length > 0 && (
+          {!isLayout && webMode === 'frozen' && doc.setupSteps.length > 0 && (
             <button title={doc.setupSteps.map(describeStep).join('\n')} onClick={() => recapture({ setupSteps: [] })}>Clear {doc.setupSteps.length} recorded step(s)</button>
           )}
         </div>
         <div className="web-scroll" ref={webScroll}>
           {(() => {
             const ws = Math.min(1, webW / doc.captureWidthPx);
-            const h = webMode === 'frozen' ? Math.max(project.analysis.documentHeightPx, 400) : 900;
+            const h = webMode === 'frozen' ? Math.max(analysis!.documentHeightPx, 400) : 900;
             return (
               <div style={{ width: doc.captureWidthPx * ws, height: h * ws, position: 'relative' }}>
                 {webMode === 'frozen' ? (
@@ -1045,10 +1159,10 @@ export function Editor({ projectId }: { projectId: string }) {
             );
           })()}
         </div>
-        {project.analysis.warnings.length > 0 && (
+        {analysis!.warnings.length > 0 && (
           <details className="warnings">
-            <summary>{project.analysis.warnings.length} capture warning(s)</summary>
-            <ul>{project.analysis.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+            <summary>{analysis!.warnings.length} capture warning(s)</summary>
+            <ul>{analysis!.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
           </details>
         )}
       </section>
@@ -1070,7 +1184,7 @@ export function Editor({ projectId }: { projectId: string }) {
             <div key={pg.id} className="page-wrap" style={{ margin: `${12 + pad.t * zoom}px 16px ${20 + pad.b * zoom}px ${16 + pad.l * zoom}px` }}>
               <div className="page-head">
                 <span>Page {pi + 1}</span>
-                {!IS_STATIC && <button onClick={() => doProof(pg.id)} aria-pressed={!!pf}>{pf ? 'Hide proof' : 'Proof'}</button>}
+                {!IS_STATIC && !isLayout && <button onClick={() => doProof(pg.id)} aria-pressed={!!pf}>{pf ? 'Hide proof' : 'Proof'}</button>}
                 {pf && (
                   <>
                     <label>Opacity <input type="range" min={0} max={1} step={0.05} value={pf.opacity} onChange={(e) => setProof((p) => ({ ...p, [pg.id]: { ...pf, opacity: Number(e.target.value) } }))} /></label>
@@ -1431,6 +1545,7 @@ export function Editor({ projectId }: { projectId: string }) {
         </ul>
         {doc.overrides.length > 0 && <button onClick={() => commit((d) => ops.revertAllOverrides(d))}>Revert all</button>}
 
+        {!isLayout && <>
         <h2>Snapshots</h2>
         <div className="row">
           <input aria-label="Snapshot name" placeholder="Name" value={snapName} onChange={(e) => setSnapName(e.target.value)} />
@@ -1443,6 +1558,7 @@ export function Editor({ projectId }: { projectId: string }) {
             </li>
           ))}
         </ul>
+        </>}
       </aside>
 
       {hl.web && <div className="hl hl-web" data-testid="hl-web" style={{ left: hl.web.x, top: hl.web.y, width: hl.web.w, height: hl.web.h }} />}

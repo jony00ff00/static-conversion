@@ -409,3 +409,8 @@
 .nodes-app .steps-list, .nodes-app .rules, .nodes-app .picked, .nodes-app .overrides { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; display: grid; gap: 0.2rem; }
 .nodes-app .edit-target { display: grid; gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
 .nodes-app button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.nodes-app { --node-pageSetup: #7c3aed; --node-flow: #0d9488; }
+.nodes-app .palette-pageSetup { border-left-color: var(--node-pageSetup); }
+.nodes-app .palette-flow { border-left-color: var(--node-flow); }
+.nodes-app .cms-node-pageSetup { border-top-color: var(--node-pageSetup); }
+.nodes-app .cms-node-flow { border-top-color: var(--node-flow); }

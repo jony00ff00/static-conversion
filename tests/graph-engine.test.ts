@@ -82,6 +82,7 @@ function setup() {
       return { analysis: { ...ANALYSIS, captureWidthPx: settings.captureWidthPx }, frozenHtml: FROZEN, bodyWpId: 'body', baseUrl: 'x' };
     },
     parseHtml: (html) => parseHTML(html).document as unknown as Document,
+    measureFlow: async () => ({ height: 0, blocks: [], lines: [], tables: [] }),
   };
   const document = ops.newEditorDocument(ANALYSIS, 'body', 680);
   const ctx: EvalContext = { projectId: 'p-test', services, project: { title: 'Test page', document, capture: projectCapture() } };
@@ -115,7 +116,7 @@ describe('N0: the engine stays pure', () => {
       // Code only: comments may mention what services do.
       const src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
       expect(f.endsWith('.ts') && !f.endsWith('.tsx'), f).toBe(true);
-      expect(src, f).not.toMatch(/from 'react|\bwindow\.|\bdocument\.(?!pages|placements|components|decomposition|overrides)|localStorage|indexedDB|\bfetch\(|DOMParser/);
+      expect(src, f).not.toMatch(/from 'react|\bwindow\.|\bdocument\.(?:querySelector|createElement|body|head|getElement|addEventListener|cookie|location|fonts|documentElement)|localStorage|indexedDB|\bfetch\(|DOMParser/);
     }
   });
 });

@@ -21,7 +21,7 @@ export function defaultGraph(): Graph {
       { id: 'source', type: 'webSource', name: 'Project page', config: { sourceId: 'main', title: '', entry: '', hash: '' }, position: { x: 0, y } },
       { id: 'capture', type: 'capture', config: { linked: true, captureWidthPx: 680, presets: { hideChrome: true, expandInteractive: true, printMedia: false, linkUrls: false }, setupSteps: [], rules: [] }, position: { x: 260, y } },
       { id: 'components', type: 'components', config: { linked: true, granularity: 2, split: [], promoted: [], demoted: [], merged: [] }, position: { x: 520, y } },
-      { id: 'layout', type: 'layout', name: 'Pages', config: { linked: true }, position: { x: 780, y } },
+      { id: 'layout', type: 'layout', name: 'Pages', config: { linked: true, document: null }, position: { x: 780, y } },
       { id: 'export', type: 'export', config: {}, position: { x: 1040, y } },
     ],
     edges: [

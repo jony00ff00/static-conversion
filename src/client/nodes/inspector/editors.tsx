@@ -12,6 +12,9 @@ import type { FilterConfig } from '../../../graph/nodes/filter.js';
 import type { PickConfig } from '../../../graph/nodes/pick.js';
 import type { EditConfig } from '../../../graph/nodes/edit.js';
 import type { WebSourceConfig } from '../../../graph/nodes/web-source.js';
+import type { LayoutConfig } from '../../../graph/nodes/layout.js';
+import type { PageSetupConfig } from '../../../graph/nodes/page-setup.js';
+import type { FlowConfig } from '../../../graph/nodes/flow.js';
 import { editorStore, useEditor } from '../store.js';
 import { useHost } from '../host.js';
 import { CheckboxField, SelectField, TextField } from './fields.js';
@@ -45,7 +48,7 @@ function WebSourceEditor({ node }: EditorProps) {
     return (
       <div className="node-editor">
         <p>
-          The project’s own page, as captured in the <button type="button" className="link" onClick={host.openEditor}>Editor tab</button>.
+          The project’s own page, as captured in the <button type="button" className="link" onClick={() => host.openEditor()}>Editor tab</button>.
         </p>
         <p className="muted small">To bring in another page, add a new Web Source node.</p>
       </div>
@@ -318,17 +321,92 @@ function FilterEditor({ node }: EditorProps) {
 
 function LayoutEditor({ node }: EditorProps) {
   const host = useHost();
-  const linked = (node.config as { linked: boolean }).linked;
+  const c = node.config as LayoutConfig;
+  const result = useEditor((s) => s.results[node.id]);
   return (
     <div className="node-editor">
-      {linked ? (
+      {c.linked ? (
         <>
-          <p>These are the Editor tab’s pages.</p>
-          <button type="button" className="primary" onClick={host.openEditor}>Edit pages</button>
+          <p>These are the Editor tab’s project pages.</p>
+          <button type="button" className="primary" onClick={() => host.openEditor()}>Edit pages</button>
+          <p className="muted small">A separate layout starts from a copy of these pages and can take components from any node.</p>
+          <button
+            type="button"
+            onClick={() =>
+              editorStore.getState().updateConfig<LayoutConfig>(node.id, { linked: false, document: structuredClone(host.document) })
+            }
+          >
+            Make a separate layout
+          </button>
         </>
       ) : (
-        <p className="muted">Layouts of their own arrive in a later milestone (N4). Until then, the default Layout node shows the Editor tab’s pages.</p>
+        <>
+          <p>{result?.info.pages !== undefined ? `${result.info.pages} page(s), ${result.info.frames} frame(s).` : 'Its own pages.'} Arrange them in the Editor tab.</p>
+          <button type="button" className="primary" onClick={() => host.openEditor(node.id)}>Edit pages</button>
+          <p className="muted small">Its library is what comes into it: connect Components, Pick, Edit or Filter nodes (several are fine, from different pages).</p>
+          {c.document && (
+            <button type="button" className="ghost danger" onClick={() => window.confirm('Remove every page and frame of this layout?') && update<LayoutConfig>(node.id, { document: null })}>
+              Start again
+            </button>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+function PageSetupEditor({ node }: EditorProps) {
+  const c = node.config as PageSetupConfig;
+  const result = useEditor((s) => s.results[node.id]);
+  return (
+    <div className="node-editor">
+      <SelectField
+        label="Orientation"
+        value={c.orientation}
+        options={[
+          { value: 'portrait', label: 'Portrait' },
+          { value: 'landscape', label: 'Landscape' },
+        ]}
+        onChange={(orientation) => update<PageSetupConfig>(node.id, { orientation })}
+      />
+      <fieldset>
+        <legend>Margins (mm)</legend>
+        <div className="kinds">
+          {(['top', 'right', 'bottom', 'left'] as const).map((k) => (
+            <label key={k} className="field">
+              <span>{k}</span>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                aria-label={`${k} margin (mm)`}
+                value={c.marginsMm[k]}
+                onChange={(e) => update<PageSetupConfig>(node.id, { marginsMm: { ...c.marginsMm, [k]: Number(e.target.value) } })}
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {result?.status === 'waiting' && <p className="error-text">{result.message}</p>}
+      <p className="muted small">Layouts and flows connected to this use it instead of their own setup.</p>
+    </div>
+  );
+}
+
+function FlowEditor({ node }: EditorProps) {
+  const c = node.config as FlowConfig;
+  return (
+    <div className="node-editor">
+      <SelectField
+        label="What to flow"
+        value={c.which}
+        options={[
+          { value: 'first', label: 'The first component' },
+          { value: 'each', label: 'Each component, each from a new page' },
+        ]}
+        onChange={(which) => update<FlowConfig>(node.id, { which })}
+      />
+      <p className="muted small">Pages are added as needed. Breaks keep at least two lines together, never split a table row or an image, and repeat table headers.</p>
     </div>
   );
 }
@@ -337,7 +415,7 @@ function ExportEditor() {
   const host = useHost();
   return (
     <div className="node-editor">
-      <p>Export the pages from the <button type="button" className="link" onClick={host.openEditor}>Editor tab</button> for now; exporting from here arrives in a later milestone (N5).</p>
+      <p>Export the pages from the <button type="button" className="link" onClick={() => host.openEditor()}>Editor tab</button> for now; exporting from here arrives in a later milestone (N5).</p>
     </div>
   );
 }
@@ -349,6 +427,8 @@ export const EDITORS: Record<string, ComponentType<EditorProps>> = {
   pick: PickEditor,
   edit: EditEditor,
   filter: FilterEditor,
+  pageSetup: PageSetupEditor,
   layout: LayoutEditor,
+  flow: FlowEditor,
   export: ExportEditor,
 };

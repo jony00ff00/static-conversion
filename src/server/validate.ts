@@ -35,6 +35,7 @@ const Component = z.object({
   heightPx: num.nonnegative(),
   bg: z.string(),
   minFontPx: num.nullable(),
+  captureKey: z.string().max(200).optional(),
 });
 
 const Override = z.union([

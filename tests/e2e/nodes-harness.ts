@@ -46,6 +46,7 @@ export interface ResultSummary {
   items?: string[];
   overrides?: unknown[];
   capture?: { key: string; nodes: unknown[]; settings: unknown };
+  pages?: { document: import('../../src/model/types.js').EditorDocument; captureKeys: string[]; overrides: number };
 }
 
 export const resultsOfPage = (page: Page) =>
@@ -58,3 +59,18 @@ export const selectNode = async (page: Page, id: string) => {
   await nodeEl(page, id).locator('header').click();
   await page.waitForSelector(`.nodes-app .inspector .inspector-head`);
 };
+
+export const palette = (label: string) => `.nodes-app .palette button.palette-item:has(.palette-label:text-is("${label}"))`;
+
+/** Add a node from the palette, connected after `from` (an output port), returning its id. */
+export async function addAfter(page: Page, label: string, from: string, fromPort: string, toPort: string) {
+  await page.click(palette(label));
+  const id = (await graphOfPage(page)).nodes.at(-1)!.id;
+  await page.evaluate((e) => (window as unknown as { __veConnect: (e: object) => void }).__veConnect(e), { source: from, sourcePort: fromPort, target: id, targetPort: toPort });
+  await graphIdle(page);
+  return id;
+}
+
+/** Connect two nodes through the store (dragging between handles is covered in N1). */
+export const connectIds = (page: Page, source: string, sourcePort: string, target: string, targetPort: string) =>
+  page.evaluate((e) => (window as unknown as { __veConnect: (e: object) => string | undefined }).__veConnect(e), { source, sourcePort, target, targetPort });

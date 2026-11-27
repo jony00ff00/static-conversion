@@ -38,10 +38,19 @@ export interface ComponentSet {
   overrides: Override[];
 }
 
-/** `pages`: laid-out pages. Until Layout nodes are editable (N4), the Editor tab's document. */
+/**
+ * `pages`: laid-out pages. Components name their capture (`captureKey`); those without one come from `capture`.
+ * `overrides` are content edits made upstream (Edit nodes), applied on top of the document's own.
+ */
 export interface PagesValue {
   document: EditorDocument;
+  /** The main capture (the first input's). */
   capture: CaptureValue;
+  /** Every capture the pages draw from, by key. */
+  captures: Record<string, CaptureValue>;
+  overrides: Override[];
+  /** Components the layout can place (its inputs'), for the Editor tab's library. */
+  available: ComponentDef[];
 }
 
 /** Decomposition settings the Components node owns (rules belong to the capture). */

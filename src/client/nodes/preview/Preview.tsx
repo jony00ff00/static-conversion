@@ -60,6 +60,7 @@ function PreviewFor({ node, result }: { node: GraphNode; result?: NodeResult }) 
     case 'edit':
       return notReady ? <Waiting result={result} /> : <EditView node={node} set={result!.outputs.components as ComponentSet} />;
     case 'layout':
+    case 'flow':
       return notReady ? <Waiting result={result} /> : <PagesView pages={result!.outputs.pages as PagesValue} />;
     case 'export':
       return <ExportView node={node} result={result} />;
@@ -319,7 +320,8 @@ function PagesView({ pages }: { pages: PagesValue }) {
   const H = Math.ceil(mmToPx(t.height));
   const s = Math.min(1, (width - 2) / W);
   const htmls = useMemo(() => {
-    const htmlFor = makeHtmlFor(host.projectId, pages.capture.frozenHtml, pages.capture.baseUrl, doc);
+    const captures = Object.fromEntries(Object.entries(pages.captures).map(([k, c]) => [k, { frozenHtml: c.frozenHtml, baseUrl: c.baseUrl }]));
+    const htmlFor = makeHtmlFor(host.projectId, pages.capture.frozenHtml, pages.capture.baseUrl, doc, { captures, overrides: pages.overrides });
     return doc.pages.map((p) => composePageHtml(doc, p.id, htmlFor));
   }, [doc, pages.capture, host.projectId]);
   return (

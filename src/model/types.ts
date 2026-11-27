@@ -57,6 +57,11 @@ export interface ComponentDef {
   rootWpId: string;
   /** For merged components: only these children of the root stay visible. */
   showWpIds?: string[];
+  /**
+   * Which capture the component comes from (a Capture node's key). Only in layouts of the Nodes tab, which can mix
+   * pages; without it, the document's own capture.
+   */
+  captureKey?: string;
   /** Natural size at the capture width, CSS px. */
   widthPx: number;
   heightPx: number;

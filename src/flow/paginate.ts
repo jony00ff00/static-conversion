@@ -11,14 +11,14 @@ import type { ComponentDef, EditorDocument } from '../model/types.js';
 export type MeasureFlow = (def: ComponentDef, widthPx: number) => Promise<FlowLayout>;
 
 /** Auto-paginate a component onto as many full-content-area pages as needed. */
-export async function autoPaginateDoc(doc0: EditorDocument, componentId: string, startPageId: string, measure: MeasureFlow) {
+export async function autoPaginateDoc(doc0: EditorDocument, componentId: string, startPageId: string, measure: MeasureFlow, chainId?: string) {
   const def = doc0.components[componentId];
   if (!def) throw new Error(`unknown component ${componentId}`);
   const c = contentRectMm(doc0.pageSetup);
   const layout = await measure(def, mmToPx(c.w));
   const probe = computeSlices(layout, [{ placementId: 'probe', heightPx: mmToPx(c.h) }], { unlimited: true });
   const pageCount = probe.filter((x) => x.endPx > x.startPx).length || 1;
-  let doc = flowOntoPages(doc0, componentId, startPageId, pageCount);
+  let doc = flowOntoPages(doc0, componentId, startPageId, pageCount, chainId);
   const chain = doc.chains[doc.chains.length - 1]!;
   const frames = chain.placementIds.map((id) => ({ placementId: id, heightPx: mmToPx(doc.placements.find((p) => p.id === id)!.hMm) }));
   doc = setChainSlices(doc, chain.id, computeSlices(layout, frames));

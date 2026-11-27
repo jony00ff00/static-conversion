@@ -6,6 +6,8 @@ import { exportNode } from './export.js';
 import { filter } from './filter.js';
 import { layout } from './layout.js';
 import { pick } from './pick.js';
+import { pageSetup } from './page-setup.js';
+import { flow } from './flow.js';
 import { webSource } from './web-source.js';
 
 /** Every node type, in palette order. */
@@ -16,8 +18,10 @@ export const REGISTRY: NodeRegistry = {
   pick,
   edit,
   filter,
+  pageSetup,
   layout,
+  flow,
   export: exportNode,
 };
 
-export { capture, components, edit, exportNode, filter, layout, pick, webSource };
+export { capture, components, edit, exportNode, filter, flow, layout, pageSetup, pick, webSource };
