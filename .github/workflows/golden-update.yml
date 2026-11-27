@@ -19,6 +19,8 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
+      - name: Install PDF tools (pdfinfo, pdftotext, pdftoppm)
+        run: apt-get update && apt-get install -y --no-install-recommends poppler-utils
       - uses: actions/checkout@v4
       - name: Fonts (Inter as the default sans-serif, as in development)
         run: sh scripts/ci-fonts.sh
