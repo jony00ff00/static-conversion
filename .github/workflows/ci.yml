@@ -16,6 +16,8 @@ jobs:
       - name: Install PDF tools (pdfinfo, pdffonts, pdftotext, pdftoppm)
         run: apt-get update && apt-get install -y --no-install-recommends poppler-utils
       - uses: actions/checkout@v4
+      - name: Fonts (Inter as the default sans-serif, as in development)
+        run: sh scripts/ci-fonts.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22

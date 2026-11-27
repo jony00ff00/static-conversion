@@ -20,6 +20,8 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
+      - name: Fonts (Inter as the default sans-serif, as in development)
+        run: sh scripts/ci-fonts.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
