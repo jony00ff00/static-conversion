@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseHTML } from 'linkedom';
@@ -239,3 +240,85 @@ export function autoPaginate(s: ProjectState, componentId: string, startPageId: 
 export function reflowChain(s: ProjectState, chainId: string) {
   return reflowChainDoc(s.document, chainId, (def, w) => measureFlow(s, def, w));
 }
+
+/* ------------------------------------------------- node graph (Nodes tab) */
+
+/** A page added in the Nodes tab (a Web Source node), stored with the project. */
+export interface ExtraSource {
+  id: string;
+  title: string;
+  kind: Imported['kind'];
+  source: RenderSource;
+  entry: string;
+  /** Content hash of what was imported, so a re-import re-runs what follows. */
+  hash: string;
+  createdAt: string;
+}
+
+const sourcesFile = (id: string) => path.join(pdir(safeId(id)), 'sources.json');
+const safeSourceId = (sid: string) => {
+  if (!/^(main|s-[a-z0-9-]{4,40})$/.test(sid)) throw Object.assign(new Error('bad source id'), { status: 400 });
+  return sid;
+};
+
+export async function listSources(id: string): Promise<Record<string, ExtraSource>> {
+  return readFile(sourcesFile(id), 'utf8').then(JSON.parse, () => ({}));
+}
+
+/** Import another page into the project (same inputs as creating a project, except URL and folder). */
+export async function addSource(s: ProjectState, input: { type: 'paste' | 'zip' | 'fixture'; html?: string; css?: string; js?: string; base64?: string; name?: string; title?: string }) {
+  const dir = path.join(pdir(s.meta.id), 'sources');
+  let imported: Imported;
+  let title = input.title ?? '';
+  if (input.type === 'paste') {
+    imported = await importPaste({ html: input.html ?? '', css: input.css, js: input.js }, { parentDir: dir });
+    title ||= 'Pasted page';
+  } else if (input.type === 'zip') {
+    imported = await importZip(Buffer.from(input.base64 ?? '', 'base64'), { parentDir: dir });
+    title ||= 'Zip import';
+  } else if (input.type === 'fixture') {
+    if (!input.name || !/^[\w-]+$/.test(input.name)) throw new Error('bad fixture name');
+    imported = await importDirectory(path.join(FIXTURES_DIR, input.name));
+    title ||= input.name;
+  } else {
+    throw Object.assign(new Error('Pages can be added as pasted code, an .html file or a zip.'), { status: 400 });
+  }
+  const sid = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const entry = imported.source.kind === 'dir' ? imported.source.entry : 'index.html';
+  const hash = createHash('sha256').update(JSON.stringify([input.type, input.html, input.css, input.js, input.base64, input.name])).digest('hex').slice(0, 16);
+  const src: ExtraSource = { id: sid, title, kind: imported.kind, source: imported.source, entry, hash, createdAt: new Date().toISOString() };
+  const all = await listSources(s.meta.id);
+  all[sid] = src;
+  await writeFile(sourcesFile(s.meta.id), JSON.stringify(all, null, 1));
+  return src;
+}
+
+export async function sourceOf(s: ProjectState, sid: string): Promise<RenderSource> {
+  if (safeSourceId(sid) === 'main') return s.meta.source;
+  const src = (await listSources(s.meta.id))[sid];
+  if (!src) throw Object.assign(new Error('That page is not in this project any more'), { status: 404 });
+  return src.source;
+}
+
+export interface CaptureRequest {
+  captureWidthPx: number;
+  presets: EditorDocument['presets'];
+  setupSteps: EditorDocument['setupSteps'];
+  rules: EditorDocument['decomposition']['rules'];
+}
+
+/** Capture a project page with a Capture node's settings; results are kept on disk by source and settings. */
+export async function captureSource(s: ProjectState, sid: string, req: CaptureRequest) {
+  const source = await sourceOf(s, sid);
+  const key = createHash('sha256').update(JSON.stringify([sid, sid === 'main' ? '' : (await listSources(s.meta.id))[sid]?.hash, req])).digest('hex').slice(0, 24);
+  const file = path.join(pdir(s.meta.id), 'captures', `${key}.json`);
+  const hit = await readFile(file, 'utf8').then(JSON.parse, () => null);
+  if (hit) return hit as Awaited<ReturnType<typeof analyse>>;
+  const a = await analyse(source, { captureWidthPx: req.captureWidthPx, presets: req.presets, setupSteps: req.setupSteps, decomposition: { granularity: 2, rules: req.rules, split: [], promoted: [], demoted: [], merged: [] } });
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(a));
+  return a;
+}
+
+export const loadGraph = (id: string): Promise<unknown> => readFile(path.join(pdir(safeId(id)), 'graph.json'), 'utf8').then(JSON.parse, () => null);
+export const saveGraph = (id: string, stored: unknown) => writeFile(path.join(pdir(safeId(id)), 'graph.json'), JSON.stringify(stored));

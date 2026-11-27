@@ -1,6 +1,23 @@
 import type { Analysis, EditorDocument } from '../model/types.js';
+import type { CaptureSettings } from '../graph/values.js';
 import { IS_STATIC } from '../static/env.js';
 import { staticApi } from '../static/backend.js';
+
+/** A page added in a Web Source node. */
+export interface SourceInfo {
+  id: string;
+  title: string;
+  entry: string;
+  hash: string;
+}
+
+/** A capture made for a Capture node (base URL as the server saw it; the client maps it). */
+export interface SourceCapture {
+  analysis: Analysis;
+  frozenHtml: string;
+  bodyWpId: string;
+  presetReport: { hidden: number; expanded: number; links: number } | null;
+}
 
 export interface ProjectPayload {
   meta: { id: string; title: string; importKind: string; createdAt: string; source: { kind: string } };
@@ -42,6 +59,25 @@ const serverApi = {
     post(`/api/projects/${id}/chains/${chainId}/reflow`, { document }).then((r) => json<{ document: EditorDocument }>(r)),
   snapshot: (id: string, name: string) => post(`/api/projects/${id}/snapshots`, { name }).then((r) => json<{ id: string; name: string; createdAt: string }>(r)),
   restore: (id: string, snapId: string) => post(`/api/projects/${id}/snapshots/${snapId}/restore`, {}).then((r) => json<{ document: EditorDocument }>(r)),
+  /** Nodes tab: the stored graph (null before the project has one). */
+  graph: (id: string) => fetch(`/api/projects/${id}/graph`).then((r) => json<{ stored: unknown }>(r)).then((r) => r.stored),
+  saveGraph: (id: string, stored: unknown) =>
+    fetch(`/api/projects/${id}/graph`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stored }) }).then((r) => json<{ ok: true }>(r)),
+  addSource: (id: string, input: Record<string, unknown>) => post(`/api/projects/${id}/sources`, input).then((r) => json<SourceInfo>(r)),
+  captureSource: (id: string, sourceId: string, settings: CaptureSettings) => post(`/api/projects/${id}/sources/${sourceId}/capture`, settings).then((r) => json<SourceCapture>(r)),
+  /** Where a source's files are served, given the page URL its capture saw (for images, styles and fonts). */
+  sourceBaseUrl: (id: string, sourceId: string, analysisBaseUrl: string) => {
+    let pathname = '/';
+    try {
+      pathname = new URL(analysisBaseUrl).pathname;
+    } catch {
+      /* keep / */
+    }
+    return sourceId === 'main' ? `${location.origin}/api/projects/${id}/src${pathname}` : `${location.origin}/api/projects/${id}/sources/${sourceId}/src${pathname}`;
+  },
+  /** The live (scripts running) preview of a source's entry page. */
+  sourceLiveUrl: (id: string, sourceId: string, entry: string) =>
+    sourceId === 'main' ? `/api/projects/${id}/live/${entry}` : `/api/projects/${id}/sources/${sourceId}/live/${entry}`,
 };
 
 /** The server API, or (GitHub Pages build) the same calls implemented in the browser. */

@@ -26,3 +26,12 @@ export function clientBuildOptions(o: { static: boolean }): BuildOptions {
     },
   };
 }
+
+/** The app's stylesheet: its own, React Flow's and the Nodes tab's (copied from Node CMS, scoped to .nodes-app). */
+export function clientCss(): string {
+  return [
+    text('src/client/app.css'),
+    text('node_modules/@xyflow/react/dist/style.css'),
+    text('src/client/nodes/nodes.css'),
+  ].join('\n');
+}

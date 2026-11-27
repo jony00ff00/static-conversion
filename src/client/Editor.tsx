@@ -4,6 +4,10 @@ import { clientBaseUrl, frozenForPane, liveUrl, makeHtmlFor, pageHtml, parse } f
 import { composeOverflowHtml, type Pad } from '../compose/page.js';
 import { homeHref } from './nav.js';
 import { IS_STATIC } from '../static/env.js';
+import { NodesTab } from './nodes/NodesTab.js';
+import type { NodesHost } from './nodes/host.js';
+import { hashString } from '../graph/hash.js';
+import type { ProjectSnapshot } from '../graph/values.js';
 import { buildTree, commonAncestor, defFromItem, flattenTree, type TreeItem } from '../compose/tree.js';
 import { ownText } from '../compose/isolate.js';
 import { contentRectMm, gridColumnsMm, mmToPx, PX_PER_MM, pxToMm, pxToPt, trimMm, type Rect } from '../model/geometry.js';
@@ -103,6 +107,8 @@ export function Editor({ projectId }: { projectId: string }) {
   const [selWpId, setSelWpId] = useState<string | null>(null);
   const [hoverWpId, setHoverWpId] = useState<string | null>(null);
   const [webMode, setWebMode] = useState<'frozen' | 'live'>('frozen');
+  /** Editor (the pages, as before) or Nodes (the project as a node graph). */
+  const [tab, setTab] = useState<'editor' | 'nodes'>('editor');
   const [pendingSteps, setPendingSteps] = useState<SetupStep[]>([]);
   const [zoom, setZoom] = useState(0.75);
   const [drag, setDragState] = useState<Drag | null>(null);
@@ -677,6 +683,7 @@ export function Editor({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
+      if (tab === 'nodes') return; // the Nodes tab has its own shortcuts and undo
       const t = e.target as HTMLElement;
       if (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -720,6 +727,41 @@ export function Editor({ projectId }: { projectId: string }) {
       projectId,
     };
   });
+
+  // What nodes linked to the Editor tab see: this document and the project page's capture.
+  const frozenKey = useMemo(() => (frozen ? hashString(frozen) : ''), [frozen]);
+  const snapshot = useMemo<ProjectSnapshot | null>(
+    () =>
+      project && doc && frozen
+        ? {
+            title: project.meta.title,
+            document: doc,
+            capture: {
+              sourceId: 'main',
+              key: `main:${frozenKey}`,
+              settings: { captureWidthPx: project.analysis.captureWidthPx, presets: doc.presets, setupSteps: doc.setupSteps, rules: doc.decomposition.rules },
+              analysis: project.analysis,
+              frozenHtml: frozen,
+              bodyWpId: project.bodyWpId,
+              baseUrl,
+            },
+          }
+        : null,
+    [project, doc, frozen, frozenKey, baseUrl],
+  );
+  const nodesHost = useMemo<NodesHost | null>(
+    () =>
+      doc && project
+        ? {
+            projectId,
+            document: doc,
+            mainEntry: (project.meta.source as unknown as { entry?: string }).entry ?? 'index.html',
+            openEditor: () => setTab('editor'),
+            recaptureProject: (patch) => recapture(patch, 'Capturing…'),
+          }
+        : null,
+    [projectId, doc, project], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   if (!project || !doc) return <main className="loading">{toast ? <p role="alert">{toast.text}</p> : 'Loading…'}</main>;
 
@@ -856,11 +898,34 @@ export function Editor({ projectId }: { projectId: string }) {
   const selNode = selWpId ? project.analysis.nodes.find((n) => n.wpId === selWpId) : undefined;
   const libItemsSel = flat.filter((i) => libSel.includes(i.node.wpId));
 
+  const tabs = (
+    <div role="tablist" aria-label="View" className="view-tabs">
+      <button role="tab" aria-selected={tab === 'editor'} onClick={() => setTab('editor')}>Editor</button>
+      <button role="tab" aria-selected={tab === 'nodes'} onClick={() => setTab('nodes')}>Nodes</button>
+    </div>
+  );
+
+  if (tab === 'nodes' && nodesHost) {
+    return (
+      <div className="editor nodes-mode">
+        <header className="toolbar">
+          <a href={homeHref()} className="brand">Static Conversion</a>
+          <strong className="title">{project.meta.title}</strong>
+          {tabs}
+          {busy && <span role="status" className="status">{busy}</span>}
+        </header>
+        <NodesTab host={nodesHost} snapshot={snapshot} />
+        {toast && <div role={toast.kind === 'error' ? 'alert' : 'status'} className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
+      </div>
+    );
+  }
+
   return (
     <div className="editor" onPointerUp={() => drag?.kind !== 'place' && onOverlayUp()}>
       <header className="toolbar">
         <a href={homeHref()} className="brand">Static Conversion</a>
         <strong className="title">{project.meta.title}</strong>
+        {tabs}
         <button onClick={undo} disabled={!historyRef.current?.canUndo} aria-label="Undo">↶ Undo</button>
         <button onClick={redo} disabled={!historyRef.current?.canRedo} aria-label="Redo">↷ Redo</button>
         <label>
@@ -1385,7 +1450,7 @@ export function Editor({ projectId }: { projectId: string }) {
         <div key={i} className="hl hl-print" data-testid="hl-print" style={{ left: r.x, top: r.y, width: r.w, height: r.h }} />
       ))}
       {drag?.kind === 'place' && (
-        <div className="ghost" style={{ left: drag.x + 8, top: drag.y + 8 }}>
+        <div className="drag-ghost" style={{ left: drag.x + 8, top: drag.y + 8 }}>
           {drag.label}
         </div>
       )}

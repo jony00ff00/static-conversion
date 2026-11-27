@@ -6,7 +6,7 @@
 import { build } from 'esbuild';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ROOT, clientBuildOptions } from '../src/build/client.js';
+import { ROOT, clientBuildOptions, clientCss } from '../src/build/client.js';
 import { RANDOM_SEED } from '../src/render/sandbox.js';
 
 const out = path.resolve(process.argv[2] ?? path.join(ROOT, 'dist-static'));
@@ -39,7 +39,7 @@ await build({
   logLevel: 'silent',
 });
 
-await cp(path.join(ROOT, 'src/client/app.css'), path.join(out, 'app.css'));
+await writeFile(path.join(out, 'app.css'), clientCss());
 await writeFile(
   path.join(out, 'index.html'),
   `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

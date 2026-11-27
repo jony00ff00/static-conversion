@@ -13,10 +13,17 @@ import {
   reflowChain,
   renderPages,
   saveProject,
+  addSource,
+  captureSource,
+  listSources,
+  loadGraph,
+  saveGraph,
+  sourceOf,
+  type CaptureRequest,
 } from './projects.js';
-import { FIXTURE_ORIGIN, resolveFixturePath } from '../render/sandbox.js';
+import { FIXTURE_ORIGIN, resolveFixturePath, type RenderSource } from '../render/sandbox.js';
 import { RECORDER } from '../render/recorder.js';
-import { clientBuildOptions } from '../build/client.js';
+import { clientBuildOptions, clientCss } from '../build/client.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 
@@ -71,18 +78,13 @@ const publicState = (s: Awaited<ReturnType<typeof loadProject>>) => ({
   liveAvailable: s.meta.source.kind === 'dir',
 });
 
-/** Directory the source is served from, and the entry path (for the editor's asset URLs). */
-function sourceRoot(s: Awaited<ReturnType<typeof loadProject>>) {
-  return s.meta.source.kind === 'dir' ? { root: s.meta.source.root, entry: s.meta.source.entry } : null;
-}
-
-async function serveSourceFile(res: ServerResponse, s: Awaited<ReturnType<typeof loadProject>>, rel: string, live: boolean) {
-  const src = sourceRoot(s);
+async function serveSourceFile(res: ServerResponse, source: RenderSource, rel: string, live: boolean) {
+  const src = source.kind === 'dir' ? { root: source.root, entry: source.entry } : null;
   if (!src) {
     // HAR imports: serve recorded responses by path on the original origin.
-    if (s.meta.source.kind !== 'har') return send(res, 404, 'not found', 'text/plain');
-    const har = JSON.parse(await readFile(s.meta.source.harPath, 'utf8'));
-    const origin = new URL(s.meta.source.url).origin;
+    if (source.kind !== 'har') return send(res, 404, 'not found', 'text/plain');
+    const har = JSON.parse(await readFile(source.harPath, 'utf8'));
+    const origin = new URL(source.url).origin;
     const want = `${origin}/${rel}`;
     const entry = har.log.entries.find((e: { request: { url: string } }) => e.request.url.split('?')[0] === want);
     if (!entry) return send(res, 404, 'not found', 'text/plain');
@@ -122,7 +124,7 @@ export function createAppServer() {
     try {
       if (req.method === 'GET' && (p === '/' || p.startsWith('/project/'))) return send(res, 200, INDEX, 'text/html; charset=utf-8');
       if (req.method === 'GET' && p === '/app.js') return send(res, 200, await clientBundle(), 'text/javascript; charset=utf-8');
-      if (req.method === 'GET' && p === '/app.css') return send(res, 200, await readFile(path.join(ROOT, 'src', 'client', 'app.css')), 'text/css; charset=utf-8');
+      if (req.method === 'GET' && p === '/app.css') return send(res, 200, await clientCss(), 'text/css; charset=utf-8');
       if (req.method === 'GET' && p === '/api/fixtures') {
         const names = (await readdir(FIXTURES_DIR)).filter((n) => /^\d\d-/.test(n)).sort();
         return send(res, 200, names);
@@ -139,8 +141,25 @@ export function createAppServer() {
         const s = await loadProject(id);
         if (req.method === 'GET' && rest === '') return send(res, 200, publicState(s));
         if (req.method === 'GET' && rest === '/frozen') return send(res, 200, s.frozenHtml, 'text/html; charset=utf-8');
-        if (req.method === 'GET' && rest.startsWith('/src/')) return serveSourceFile(res, s, decodeURIComponent(rest.slice(5)), false);
-        if (req.method === 'GET' && rest.startsWith('/live/')) return serveSourceFile(res, s, decodeURIComponent(rest.slice(6)), true);
+        if (req.method === 'GET' && rest.startsWith('/src/')) return serveSourceFile(res, s.meta.source, decodeURIComponent(rest.slice(5)), false);
+        if (req.method === 'GET' && rest.startsWith('/live/')) return serveSourceFile(res, s.meta.source, decodeURIComponent(rest.slice(6)), true);
+        // Nodes tab: the graph, pages added in Web Source nodes, and captures with a Capture node's settings.
+        if (req.method === 'GET' && rest === '/graph') return send(res, 200, { stored: await loadGraph(id) });
+        if (req.method === 'PUT' && rest === '/graph') {
+          const { stored } = (await body(req)) as { stored: { version?: number; graph?: { nodes?: unknown; edges?: unknown } } };
+          if (!stored || stored.version !== 1 || !Array.isArray(stored.graph?.nodes) || !Array.isArray(stored.graph?.edges)) return send(res, 400, { error: 'invalid graph' });
+          await saveGraph(id, stored);
+          return send(res, 200, { ok: true });
+        }
+        if (req.method === 'GET' && rest === '/sources') return send(res, 200, await listSources(id));
+        if (req.method === 'POST' && rest === '/sources') return send(res, 201, await addSource(s, (await body(req)) as Parameters<typeof addSource>[1]));
+        const sm = /^\/sources\/([a-z0-9-]+)(\/.*)$/.exec(rest);
+        if (sm) {
+          const [, sid, sub] = sm as unknown as [string, string, string];
+          if (req.method === 'POST' && sub === '/capture') return send(res, 200, await captureSource(s, sid, (await body(req)) as CaptureRequest));
+          if (req.method === 'GET' && sub.startsWith('/src/')) return serveSourceFile(res, await sourceOf(s, sid), decodeURIComponent(sub.slice(5)), false);
+          if (req.method === 'GET' && sub.startsWith('/live/')) return serveSourceFile(res, await sourceOf(s, sid), decodeURIComponent(sub.slice(6)), true);
+        }
         if (req.method === 'PUT' && rest === '/document') {
           const { document } = (await body(req)) as { document: unknown };
           const parsed = EditorDocumentSchema.safeParse(document);
