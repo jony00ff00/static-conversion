@@ -65,6 +65,12 @@ const serverApi = {
     fetch(`/api/projects/${id}/graph`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stored }) }).then((r) => json<{ ok: true }>(r)),
   addSource: (id: string, input: Record<string, unknown>) => post(`/api/projects/${id}/sources`, input).then((r) => json<SourceInfo>(r)),
   captureSource: (id: string, sourceId: string, settings: CaptureSettings) => post(`/api/projects/${id}/sources/${sourceId}/capture`, settings).then((r) => json<SourceCapture>(r)),
+  /** Export a node's pages (Layout, Flow, Combine or Export) from the graph: PDF, or one page as PNG. */
+  exportGraph: (id: string, body: { graph: unknown; nodeId: string; format: 'pdf' | 'png'; pageId?: string; dpi?: number }) =>
+    post(`/api/projects/${id}/graph-export`, body).then(async (r) => {
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? r.statusText);
+      return r.blob();
+    }),
   /** Where a source's files are served, given the page URL its capture saw (for images, styles and fonts). */
   sourceBaseUrl: (id: string, sourceId: string, analysisBaseUrl: string) => {
     let pathname = '/';

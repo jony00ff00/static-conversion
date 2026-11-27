@@ -23,6 +23,8 @@ import {
 } from './projects.js';
 import { FIXTURE_ORIGIN, resolveFixturePath, type RenderSource } from '../render/sandbox.js';
 import { RECORDER } from '../render/recorder.js';
+import { exportNodePages } from './graph-run.js';
+import { GRAPH_VERSION, graphOf } from '../graph/index.js';
 import { clientBuildOptions, clientCss } from '../build/client.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
@@ -150,6 +152,13 @@ export function createAppServer() {
           if (!stored || stored.version !== 1 || !Array.isArray(stored.graph?.nodes) || !Array.isArray(stored.graph?.edges)) return send(res, 400, { error: 'invalid graph' });
           await saveGraph(id, stored);
           return send(res, 200, { ok: true });
+        }
+        if (req.method === 'POST' && rest === '/graph-export') {
+          const b = (await body(req)) as { graph?: unknown; nodeId: string; format: 'pdf' | 'png'; pageId?: string; dpi?: number };
+          const g = b.graph ? graphOf({ version: GRAPH_VERSION, graph: b.graph }) : graphOf(await loadGraph(id));
+          if (g.issues.length) return send(res, 400, { error: g.issues[0]!.message });
+          const out = await exportNodePages(s, g.graph, b.nodeId, b.format === 'png' ? { format: 'png', pageId: b.pageId, dpi: b.dpi } : { format: 'pdf' });
+          return send(res, 200, out, b.format === 'png' ? 'image/png' : 'application/pdf');
         }
         if (req.method === 'GET' && rest === '/sources') return send(res, 200, await listSources(id));
         if (req.method === 'POST' && rest === '/sources') return send(res, 201, await addSource(s, (await body(req)) as Parameters<typeof addSource>[1]));

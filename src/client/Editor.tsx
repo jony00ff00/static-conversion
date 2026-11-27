@@ -11,6 +11,7 @@ import { editorStore as graphStoreRef, useEditor as useGraph } from './nodes/sto
 /** The open graph store (a live binding: it is replaced when a project's graph opens). */
 const graphStore = () => graphStoreRef;
 import { undoLog } from './undo-log.js';
+import { exportNodePages } from './nodes/export.js';
 import { emptyLayout, refreshLayout, type PagesValue } from '../graph/index.js';
 import type { LayoutConfig } from '../graph/nodes/layout.js';
 import type { ComposeExtras } from './render.js';
@@ -943,7 +944,14 @@ export function Editor({ projectId }: { projectId: string }) {
 
   /** A Layout node's pages: exported through the graph (milestone N5). */
   const exportLayout = async () => {
-    setToast({ kind: 'info', text: 'Export a layout from an Export node in the Nodes tab.' });
+    setBusy('Exporting PDF…');
+    try {
+      await exportNodePages(projectId, target, 'pdf', layouts.split('\u0001').find((l) => l.startsWith(`${target}\u0000`))?.split('\u0000')[1] ?? 'layout');
+    } catch (e) {
+      setToast({ kind: 'error', text: (e as Error).message });
+    } finally {
+      setBusy('');
+    }
   };
 
   const libItem = (item: TreeItem, depth = 0): JSX.Element => {

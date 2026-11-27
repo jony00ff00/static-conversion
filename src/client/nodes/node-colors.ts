@@ -10,6 +10,7 @@ export const NODE_COLORS: Record<string, string> = {
   pageSetup: '#7c3aed',
   layout: '#059669',
   flow: '#0d9488',
+  combine: '#be123c',
   export: '#dc2626',
 };
 export const UNKNOWN_NODE_COLOR = '#cbd5e1';

@@ -274,7 +274,8 @@ export const staticApi = {
   addSource: async (id: string, input: Record<string, unknown>): Promise<SourceInfo> => {
     const p = await load(id);
     const { files, title, entry } = await importFiles(input);
-    const sid = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const replace = typeof input.replace === 'string' && p.sources?.[input.replace] ? input.replace : undefined;
+    const sid = replace ?? `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     await storeFiles(sourceFolder(id, sid), files);
     const info: SourceInfo = { id: sid, title, entry, hash: hashString(JSON.stringify([input.type, input.html, input.css, input.js, input.base64, input.name])) };
     await save({ ...(await load(id)), sources: { ...(p.sources ?? {}), [sid]: info } });
@@ -296,6 +297,11 @@ export const staticApi = {
     const out: SourceCapture = { analysis: { captureWidthPx: settings.captureWidthPx, documentHeightPx: cap.decomposition.documentHeightPx, baseUrl: cap.baseUrl, pageBg: cap.decomposition.pageBg, nodes: cap.decomposition.nodes, warnings: cap.warnings }, frozenHtml: cap.html, bodyWpId: cap.decomposition.bodyWpId, presetReport: cap.presetReport };
     await idbPut('files', key, out);
     return out;
+  },
+
+  /** The browser build prints from the pages the editor already has (see client/nodes/export.ts). */
+  exportGraph: async (): Promise<Blob> => {
+    throw new Error('Exporting files needs the local version; use Print / Save PDF.');
   },
 
   /** In the browser build the capture already ran at the service-worker URL its files live at. */

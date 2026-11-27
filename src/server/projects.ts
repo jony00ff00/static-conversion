@@ -187,12 +187,25 @@ export async function renderPages(
   s: ProjectState,
   opts: { format: 'pdf' } | { format: 'png'; pageId: string; dpi?: number; editorFrame?: boolean },
 ): Promise<Buffer> {
-  const t = trimMm(s.document.pageSetup);
+  return renderDocument(s.meta.source, {}, s.document, htmlForServer(s), opts);
+}
+
+/**
+ * Render a document's pages in the sandbox: PDF (every page, exact A4 boxes) or one page as PNG. `extraDirs` are
+ * further pages the components come from (served under /__src/<id>/).
+ */
+export async function renderDocument(
+  source: RenderSource,
+  extraDirs: Record<string, string>,
+  doc: EditorDocument,
+  htmlFor: HtmlFor,
+  opts: { format: 'pdf' } | { format: 'png'; pageId: string; dpi?: number; editorFrame?: boolean },
+): Promise<Buffer> {
+  const t = trimMm(doc.pageSetup);
   const dpi = opts.format === 'png' ? opts.dpi ?? 300 : 300;
   const scale = dpi / 96;
-  return withSandbox(s.meta.source, { viewport: { width: Math.ceil(mmToPx(t.width)), height: Math.ceil(mmToPx(t.height)) }, scale, timeoutMs: 120_000 }, async (sb) => {
-    const htmlFor = htmlForServer(s);
-    let html = opts.format === 'pdf' ? composeDocumentHtml(s.document, htmlFor) : composePageHtml(s.document, opts.pageId, htmlFor);
+  return withSandbox(source, { viewport: { width: Math.ceil(mmToPx(t.width)), height: Math.ceil(mmToPx(t.height)) }, scale, timeoutMs: 120_000, extraDirs }, async (sb) => {
+    let html = opts.format === 'pdf' ? composeDocumentHtml(doc, htmlFor) : composePageHtml(doc, opts.pageId, htmlFor);
     if (opts.format === 'png' && opts.editorFrame) {
       // Proof: draw the page inside a page iframe, the same structure as the
       // editor, so the two can be compared pixel for pixel.
@@ -266,7 +279,8 @@ export async function listSources(id: string): Promise<Record<string, ExtraSourc
 }
 
 /** Import another page into the project (same inputs as creating a project, except URL and folder). */
-export async function addSource(s: ProjectState, input: { type: 'paste' | 'zip' | 'fixture'; html?: string; css?: string; js?: string; base64?: string; name?: string; title?: string }) {
+/** `replace`: re-import into an existing page (same id, so components placed from it keep their place). */
+export async function addSource(s: ProjectState, input: { type: 'paste' | 'zip' | 'fixture'; html?: string; css?: string; js?: string; base64?: string; name?: string; title?: string; replace?: string }) {
   const dir = path.join(pdir(s.meta.id), 'sources');
   let imported: Imported;
   let title = input.title ?? '';
@@ -283,7 +297,8 @@ export async function addSource(s: ProjectState, input: { type: 'paste' | 'zip' 
   } else {
     throw Object.assign(new Error('Pages can be added as pasted code, an .html file or a zip.'), { status: 400 });
   }
-  const sid = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const all0 = await listSources(s.meta.id);
+  const sid = input.replace && all0[safeSourceId(input.replace)] ? input.replace : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const entry = imported.source.kind === 'dir' ? imported.source.entry : 'index.html';
   const hash = createHash('sha256').update(JSON.stringify([input.type, input.html, input.css, input.js, input.base64, input.name])).digest('hex').slice(0, 16);
   const src: ExtraSource = { id: sid, title, kind: imported.kind, source: imported.source, entry, hash, createdAt: new Date().toISOString() };

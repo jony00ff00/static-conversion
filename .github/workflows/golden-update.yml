@@ -28,6 +28,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run golden:update
+      - name: Sample graph exports (golden/graphs)
+        run: GOLDEN_UPDATE=1 npx vitest run tests/e2e/n5-export.test.ts
       - name: Isolation test (diff images on failure)
         continue-on-error: true
         run: npx vitest run tests/m3-decomposition.test.ts

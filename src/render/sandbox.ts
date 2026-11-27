@@ -38,7 +38,15 @@ export interface SandboxOptions {
   scale?: number;
   /** Hard wall-clock limit for the whole session, including browser start. */
   timeoutMs?: number;
+  /**
+   * More folders served at `http://fixture.local/__src/<id>/…` (pages added in the Nodes tab), for documents that
+   * mix pages.
+   */
+  extraDirs?: Record<string, string>;
 }
+
+/** Where an extra page's files are served in a sandbox that mixes pages (see `SandboxOptions.extraDirs`). */
+export const extraSourceBase = (id: string) => `${FIXTURE_ORIGIN}/__src/${id}/`;
 
 export interface SandboxSession {
   page: Page;
@@ -170,6 +178,25 @@ export async function withSandbox<T>(
       await context.routeFromHAR(source.harPath, { notFound: 'abort', url: /.*/ });
       context.on('requestfailed', (req) => {
         if (!req.url().startsWith('data:') && !req.url().startsWith('blob:')) blockedRequests.push(req.url());
+      });
+    }
+    // Pages added in the Nodes tab, each under its own path (taking precedence over the routes above).
+    if (opts.extraDirs && Object.keys(opts.extraDirs).length) {
+      await context.route(`${FIXTURE_ORIGIN}/__src/**`, async (route) => {
+        const url = new URL(route.request().url());
+        const m = /^\/__src\/([a-z0-9-]+)\/(.*)$/.exec(url.pathname);
+        const root = m && opts.extraDirs![m[1]!];
+        const file = root && resolveFixturePath(root, `${FIXTURE_ORIGIN}/${m![2]}`);
+        if (!file) {
+          blockedRequests.push(url.href);
+          return route.abort('blockedbyclient');
+        }
+        try {
+          const body = await readFile(file);
+          return route.fulfill({ status: 200, body, headers: { 'content-type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream' } });
+        } catch {
+          return route.fulfill({ status: 404, body: 'Not found' });
+        }
       });
     }
     // Registered last, so it takes precedence over the routes above.

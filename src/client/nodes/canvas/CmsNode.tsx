@@ -136,8 +136,10 @@ function summarize(node: GraphNode, result: NodeResult | undefined): string {
       return info.pages !== undefined ? `${n(info.pages, 'page')} · ${c.which === 'each' ? 'each component' : 'first component'}` : c.which === 'each' ? 'Each component' : 'The first component';
     case 'pageSetup':
       return info.page !== undefined ? `${info.page} · ${info.margins}` : '';
+    case 'combine':
+      return info.pages !== undefined ? `${n(info.parts, 'part')} · ${n(info.pages, 'page')}` : 'Connect pages';
     case 'export':
-      return info.pages !== undefined ? `${n(info.pages, 'page')} ready` : 'Connect pages';
+      return info.pages !== undefined ? `${n(info.pages, 'page')} ready` : 'Connect pages or a document';
     default:
       return '';
   }

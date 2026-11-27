@@ -414,3 +414,6 @@
 .nodes-app .palette-flow { border-left-color: var(--node-flow); }
 .nodes-app .cms-node-pageSetup { border-top-color: var(--node-pageSetup); }
 .nodes-app .cms-node-flow { border-top-color: var(--node-flow); }
+.nodes-app { --node-combine: #be123c; }
+.nodes-app .palette-combine { border-left-color: var(--node-combine); }
+.nodes-app .cms-node-combine { border-top-color: var(--node-combine); }

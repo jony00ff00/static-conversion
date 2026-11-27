@@ -62,8 +62,10 @@ function PreviewFor({ node, result }: { node: GraphNode; result?: NodeResult }) 
     case 'layout':
     case 'flow':
       return notReady ? <Waiting result={result} /> : <PagesView pages={result!.outputs.pages as PagesValue} />;
+    case 'combine':
+      return notReady ? <Waiting result={result} /> : <PagesView pages={result!.outputs.document as PagesValue} />;
     case 'export':
-      return <ExportView node={node} result={result} />;
+      return notReady ? <Waiting result={result} /> : <PagesView pages={result!.outputs.result as PagesValue} />;
     default:
       return null;
   }
@@ -335,10 +337,5 @@ function PagesView({ pages }: { pages: PagesValue }) {
   );
 }
 
-function ExportView({ node, result }: { node: GraphNode; result?: NodeResult }) {
-  const pages = useInput<PagesValue>(node.id, 'pages');
-  if (!pages) return <Waiting result={result} />;
-  return <PagesView pages={pages} />;
-}
 
 export type { ComponentDef };

@@ -17,6 +17,8 @@ import type { PageSetupConfig } from '../../../graph/nodes/page-setup.js';
 import type { FlowConfig } from '../../../graph/nodes/flow.js';
 import { editorStore, useEditor } from '../store.js';
 import { useHost } from '../host.js';
+import { exportNodePages } from '../export.js';
+import { IS_STATIC } from '../../../static/env.js';
 import { CheckboxField, SelectField, TextField } from './fields.js';
 
 type EditorProps = { node: GraphNode };
@@ -57,7 +59,8 @@ function WebSourceEditor({ node }: EditorProps) {
   const add = async (label: string, input: Record<string, unknown>) => {
     setBusy(label);
     try {
-      const src = await api.addSource(host.projectId, input);
+      // Re-importing keeps the page's id, so components placed from it keep their place.
+      const src = await api.addSource(host.projectId, c.sourceId && c.sourceId !== 'main' ? { ...input, replace: c.sourceId } : input);
       editorStore.getState().updateConfig<WebSourceConfig>(node.id, { sourceId: src.id, title: src.title, entry: src.entry, hash: src.hash });
     } catch (e) {
       editorStore.getState().notify('error', (e as Error).message);
@@ -411,11 +414,30 @@ function FlowEditor({ node }: EditorProps) {
   );
 }
 
-function ExportEditor() {
+function ExportEditor({ node }: EditorProps) {
   const host = useHost();
+  const result = useEditor((s) => s.results[node.id]);
+  const [busy, setBusy] = useState('');
+  const ready = result?.status === 'ok';
+  const run = async (format: 'pdf' | 'png') => {
+    setBusy(format === 'pdf' ? 'Exporting PDF…' : 'Exporting PNG…');
+    try {
+      await exportNodePages(host.projectId, node.id, format, node.name?.trim() || 'export');
+    } catch (e) {
+      editorStore.getState().notify('error', (e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  };
   return (
     <div className="node-editor">
-      <p>Export the pages from the <button type="button" className="link" onClick={() => host.openEditor()}>Editor tab</button> for now; exporting from here arrives in a later milestone (N5).</p>
+      {!ready && <p className="muted">{result?.message ?? 'Connect a Layout, Flow or Combine node.'}</p>}
+      <div className="button-row">
+        <button type="button" className="primary" disabled={!ready || !!busy} onClick={() => run('pdf')}>{IS_STATIC ? 'Print / Save PDF' : 'Export PDF'}</button>
+        {!IS_STATIC && <button type="button" disabled={!ready || !!busy} onClick={() => run('png')}>PNG of page 1 (300 dpi)</button>}
+      </div>
+      {busy && <p role="status" className="muted">{busy}</p>}
+      <p className="muted small">{IS_STATIC ? 'In the print dialog choose “Save as PDF”, paper A4, margins none.' : 'Exact A4 pages, fonts embedded, images at print resolution.'}</p>
     </div>
   );
 }

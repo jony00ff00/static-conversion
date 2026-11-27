@@ -11,8 +11,11 @@ import { PRINT_DEFAULTS } from '../config/printDefaults.js';
 import { hashString } from './hash.js';
 import type { CaptureValue, ComponentSet, PagesValue } from './values.js';
 
-/** A component id unique across captures (the first input's keep their own, so linked layouts match). */
-export const scopedId = (id: string, captureKey: string, primary: boolean) => (primary ? id : `${id}~${hashString(captureKey).slice(0, 6)}`);
+/**
+ * A component id unique across pages, and stable when a page is re-captured or re-imported (scoped by its source).
+ * The project's own page keeps its ids, so layouts copied from the project match.
+ */
+export const scopedId = (id: string, sourceId: string) => (sourceId === 'main' ? id : `${id}~${hashString(sourceId).slice(0, 6)}`);
 
 /** Every input's components and edits, scoped to their capture. */
 export function scopeSets(sets: ComponentSet[]): { available: ComponentDef[]; overrides: Override[]; captures: Record<string, CaptureValue>; primary: CaptureValue | undefined } {
@@ -24,14 +27,14 @@ export function scopeSets(sets: ComponentSet[]): { available: ComponentDef[]; ov
   for (const set of sets) {
     const key = set.capture.key;
     captures[key] = set.capture;
-    const isPrimary = key === primary?.key;
+    const source = set.capture.sourceId;
     for (const def of set.items) {
-      const id = scopedId(def.id, key, isPrimary);
+      const id = scopedId(def.id, source);
       if (seen.has(id)) continue;
       seen.add(id);
       available.push({ ...def, id, captureKey: key });
     }
-    for (const o of set.overrides) overrides.push({ ...o, componentId: scopedId(o.componentId, key, isPrimary) });
+    for (const o of set.overrides) overrides.push({ ...o, componentId: scopedId(o.componentId, source) });
   }
   return { available, overrides, captures, primary };
 }
