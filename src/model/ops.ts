@@ -42,9 +42,14 @@ export function pageComponent(analysis: Analysis, bodyWpId: string): ComponentDe
     widthPx: analysis.captureWidthPx,
     heightPx: analysis.documentHeightPx,
     bg: analysis.pageBg,
-    minFontPx: Math.min(...analysis.nodes.map((n) => n.minFontPx ?? Infinity).filter(Number.isFinite), Infinity) || null,
+    minFontPx: smallestFont(analysis),
   };
 }
+
+const smallestFont = (analysis: Analysis): number | null => {
+  const m = Math.min(Infinity, ...analysis.nodes.map((n) => n.minFontPx ?? Infinity));
+  return Number.isFinite(m) ? m : null;
+};
 
 /** A new document: one A4 page with the whole captured page placed in the content area. */
 export function newEditorDocument(analysis: Analysis, bodyWpId: string, captureWidthPx: number): EditorDocument {

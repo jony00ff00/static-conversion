@@ -1,0 +1,23 @@
+import type { NodeRegistry } from '../graph.js';
+import { capture } from './capture.js';
+import { components } from './components.js';
+import { edit } from './edit.js';
+import { exportNode } from './export.js';
+import { filter } from './filter.js';
+import { layout } from './layout.js';
+import { pick } from './pick.js';
+import { webSource } from './web-source.js';
+
+/** Every node type, in palette order. */
+export const REGISTRY: NodeRegistry = {
+  webSource,
+  capture,
+  components,
+  pick,
+  edit,
+  filter,
+  layout,
+  export: exportNode,
+};
+
+export { capture, components, edit, exportNode, filter, layout, pick, webSource };

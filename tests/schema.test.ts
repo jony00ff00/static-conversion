@@ -118,7 +118,6 @@ describe('Recorded steps ("Capture this state")', async () => {
   const { EditorDocumentSchema } = await import('../src/server/validate.js');
   const { newEditorDocument } = await import('../src/model/ops.js');
   const base = newEditorDocument({ captureWidthPx: 680, documentHeightPx: 100, baseUrl: '', pageBg: '#fff', nodes: [], warnings: [] }, 'body', 680);
-  base.components.page!.minFontPx = 12; // an empty test analysis has no text to measure
   const withSteps = (setupSteps: unknown[]) => EditorDocumentSchema.safeParse({ ...base, setupSteps });
 
   it('accepts clicks (as saved by earlier versions), ticks, choices and scrolls', () => {
